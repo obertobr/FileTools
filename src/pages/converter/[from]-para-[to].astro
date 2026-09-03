@@ -1,0 +1,56 @@
+---
+import Layout from '@/layouts/Layout.astro';
+import { ConvertPanel } from '@/ui/components/ConvertPanel';
+import { getAllManifests } from '@/modules/registry';
+import { FORMATS } from '@/lib/formats';
+
+export async function getStaticPaths() {
+  const manifests = getAllManifests();
+  const paths: { params: { from: string; to: string } }[] = [];
+
+  for (const manifest of manifests) {
+    for (const rule of manifest.supportedConversions) {
+      for (const fromType of rule.from) {
+        let validFroms: string[] = [];
+        
+        if (fromType.includes('*')) {
+          const prefix = fromType.split('*')[0].toLowerCase();
+          validFroms = FORMATS.filter(f => f.category === prefix || f.ext.toLowerCase().startsWith(prefix)).map(f => f.ext.replace('.', ''));
+        } else {
+          validFroms = [fromType.replace('.', '')];
+        }
+
+        for (const from of validFroms) {
+          for (const toExt of rule.to) {
+            const to = toExt.replace('.', '');
+            if (from !== to) {
+              paths.push({
+                params: { from, to },
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const uniquePaths = Array.from(
+    new Map(paths.map((p) => [`${p.params.from}-${p.params.to}`, p])).values()
+  );
+  return uniquePaths;
+}
+
+const { from, to } = Astro.params;
+const targetExt = `.${to}`;
+---
+
+<Layout title={`Converter ${from.toUpperCase()} para ${to.toUpperCase()} - FileTools`}>
+  <h1 class="text-[15px] font-medium tracking-tight">Converter {from.toUpperCase()} para {to.toUpperCase()}</h1>
+  <p class="mt-1 text-[13px] text-muted-foreground">
+    Converta seu arquivo {from.toUpperCase()} para {to.toUpperCase()} rapidamente sem enviar para nenhum servidor.
+  </p>
+  <div class="mt-6">
+    <ConvertPanel client:load fixedTarget={targetExt} accept={`.${from}`} />
+  </div>
+</Layout>
+

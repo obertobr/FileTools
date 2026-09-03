@@ -1,0 +1,19 @@
+---
+/**
+ * src/pages/index.astro
+ * App Shell — PWA entry point (start_url: '/')
+ */
+import Layout from '@/layouts/Layout.astro';
+import { ConvertPanel } from '@/ui/components/ConvertPanel';
+---
+
+<Layout>
+  <h1 class="text-[15px] font-medium tracking-tight">Convert a file</h1>
+  <p class="mt-1 text-[13px] text-muted-foreground">
+    Drop a file, choose a target format, convert.
+  </p>
+  <div class="mt-6">
+    <ConvertPanel client:load />
+  </div>
+</Layout>
+

@@ -1,0 +1,11 @@
+/**
+ * e2e/ — Playwright end-to-end tests (Step 4)
+ *
+ * Tests will be added in Step 4 covering:
+ * - OPFS lifecycle (session cleanup)
+ * - Worker/UI Comlink communication (onProgress callbacks)
+ * - SSG route generation (no duplicates, valid slugs)
+ * - Extension matching logic
+ *
+ * TODO: Implement in Step 4
+ */

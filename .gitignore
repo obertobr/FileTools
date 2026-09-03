@@ -1,1 +1,34 @@
+# Build output
+dist/
+.output/
+
+# Dependencies
+node_modules/
+
+# Astro build cache
+.astro/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Test output
+coverage/
+playwright-report/
+test-results/
+
+# Design template (source of truth migrated to src/)
 /design-template

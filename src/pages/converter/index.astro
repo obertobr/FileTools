@@ -1,0 +1,55 @@
+---
+/**
+ * src/pages/converter/index.astro
+ * Converter Catalog — SEO page listing all available conversions.
+ *
+ * Renders a filterable, searchable grid of all converters.
+ * Uses React island for the interactive search/filter UI.
+ */
+import '@/styles/global.css';
+import { Navbar } from '@/ui/components/Navbar';
+import { ConverterCatalog } from '@/ui/views/ConverterCatalog';
+
+const pathname = '/converter';
+---
+
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Conversores — FileTools</title>
+    <meta
+      name="description"
+      content="Navegue por todos os conversores disponíveis no FileTools: vídeo, áudio, imagem e documentos."
+    />
+    <meta property="og:title" content="Conversores — FileTools" />
+    <meta
+      property="og:description"
+      content="Catálogo completo de conversões de arquivos: vídeo, áudio, imagem, documentos e planilhas."
+    />
+    <!-- PWA -->
+    <meta name="theme-color" content="#1f2937" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+    />
+  </head>
+  <body>
+    <Navbar activePath={pathname} client:load />
+    <main class="mx-auto max-w-5xl px-4 pb-24 pt-12">
+      <h1 class="text-[15px] font-medium tracking-tight">Conversores</h1>
+      <p class="mt-1 text-[13px] text-muted-foreground">
+        Converta arquivos entre os formatos mais populares.
+      </p>
+      <div class="mt-6">
+        <ConverterCatalog client:load />
+      </div>
+    </main>
+  </body>
+</html>
