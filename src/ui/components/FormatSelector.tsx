@@ -1,5 +1,6 @@
-import { Check } from 'lucide-react';
+﻿import { Check } from 'lucide-react';
 import type { Format } from '@/lib/formats';
+import { Card, Typography } from '@/ui/components/core';
 import { cn } from '@/lib/utils';
 
 export function FormatSelector({
@@ -13,9 +14,11 @@ export function FormatSelector({
 }) {
   if (formats.length === 0) {
     return (
-      <p className="rounded-md border border-border bg-surface px-3 py-6 text-center font-mono text-[12px] text-muted-foreground">
-        No matching formats
-      </p>
+      <Card variant="default" className="py-6 text-center">
+        <Typography variant="code" color="muted">
+          No matching formats
+        </Typography>
+      </Card>
     );
   }
 
@@ -35,18 +38,21 @@ export function FormatSelector({
                 : 'border-border bg-surface hover:border-border-strong hover:bg-surface-raised',
             )}
           >
-            <span className="min-w-0">
-              <span
-                className={cn(
-                  'block font-mono text-[12px]',
-                  active ? 'text-primary' : 'text-foreground',
-                )}
+            <span className="min-w-0 flex-1">
+              <Typography
+                variant="code"
+                color={active ? 'primary' : 'default'}
+                className="block text-[12px]"
               >
                 {f.ext}
-              </span>
-              <span className="mt-0.5 block truncate text-[12px] text-muted-foreground">
+              </Typography>
+              <Typography
+                variant="caption"
+                color="muted"
+                className="mt-0.5 block truncate text-[12px]"
+              >
                 {f.label}
-              </span>
+              </Typography>
             </span>
             {active && <Check className="ml-auto size-3.5 shrink-0 text-primary" strokeWidth={2} />}
           </button>

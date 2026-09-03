@@ -1,10 +1,10 @@
-import { CheckCircle2, Download, RotateCcw } from 'lucide-react';
+﻿import { CheckCircle2, Download, RotateCcw } from 'lucide-react';
 import { formatBytes } from '@/lib/formats';
+import { Card, Typography, Button } from '@/ui/components/core';
 
 export function DownloadResult({
   fileName,
   size,
-  /** Blob URL to the converted file (created by the Worker) */
   blobUrl,
   onReset,
 }: {
@@ -19,37 +19,38 @@ export function DownloadResult({
     a.href = url;
     a.download = fileName;
     a.click();
-    // Only revoke if we created a temporary blob (not the real one from the Worker)
     if (!blobUrl) URL.revokeObjectURL(url);
   }
 
   return (
-    <div className="rounded-md border border-primary/30 bg-accent-subtle/15 px-3 py-3">
+    <Card variant="alert-success" className="px-3.5 py-3">
       <div className="flex items-center gap-2">
         <CheckCircle2 className="size-4 text-primary" strokeWidth={1.75} />
-        <p className="text-[13px] font-medium">Conversion complete</p>
+        <Typography variant="body" className="font-medium text-foreground">
+          Conversion complete
+        </Typography>
       </div>
-      <p className="mt-2 truncate font-mono text-[11px] text-muted-foreground">
+      <Typography variant="code" color="muted" className="mt-2 block truncate">
         {fileName} · {formatBytes(size)}
-      </p>
+      </Typography>
       <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
           onClick={handleDownload}
-          className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-3 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+          leftIcon={<Download className="size-3.5" strokeWidth={2} />}
         >
-          <Download className="size-3.5" strokeWidth={2} />
           Download
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={onReset}
-          className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-sm border border-border bg-surface px-3 text-[12px] text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground"
+          leftIcon={<RotateCcw className="size-3.5" strokeWidth={1.75} />}
         >
-          <RotateCcw className="size-3.5" strokeWidth={1.75} />
           Convert another
-        </button>
+        </Button>
       </div>
-    </div>
+    </Card>
   );
 }

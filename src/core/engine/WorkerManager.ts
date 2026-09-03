@@ -1,14 +1,22 @@
-/**
+﻿/**
  * src/core/engine/WorkerManager.ts
  *
  * The main Orchestrator (Singleton).
  * Manages the lifecycle of conversion tasks, interacts with OPFS,
  * and communicates with the Web Worker via Comlink.
+ *
+ * IMPORTANT: Some modules like FFmpeg create their own internal workers.
+ * For these modules, we execute directly on the main thread instead of
+ * going through our Comlink worker (which would be a worker-in-worker scenario).
  */
 import * as Comlink from 'comlink';
 import { OPFSManager } from '../fs/OPFSManager';
 import type { ConversionWorkerAPI } from '../workers/conversionWorker';
 import type { ExecutionContext } from '@/shared/types/module';
+import { getModuleById } from '@/modules/registry';
+
+/** Modules that spawn their own workers and must run on the main thread */
+const MAIN_THREAD_MODULES = new Set(['ffmpeg-core']);
 
 export class WorkerManager {
   private static instance: WorkerManager;
@@ -18,7 +26,6 @@ export class WorkerManager {
   private initialized = false;
 
   private constructor() {
-    // Generate a unique session ID for the current browser tab lifecycle
     this.sessionId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   }
 
@@ -29,44 +36,33 @@ export class WorkerManager {
     return WorkerManager.instance;
   }
 
-  /**
-   * Initializes the manager. Should be called when the app shell mounts.
-   */
   public async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    // 1. Initialize OPFS (Janitor cleans up old sessions)
     await OPFSManager.initialize(this.sessionId);
 
-    // 2. Spawn the Web Worker
     this.worker = new Worker(new URL('../workers/conversionWorker.ts', import.meta.url), {
       type: 'module',
     });
     
-    // 3. Wrap with Comlink
     this.workerAPI = Comlink.wrap<ConversionWorkerAPI>(this.worker);
 
-    // 4. Test connection
     const response = await this.workerAPI.ping();
     console.debug(`[WorkerManager] Worker connected: ${response}`);
 
     this.initialized = true;
   }
 
-  /**
-   * Executes a conversion task.
-   */
   public async convert(
     moduleId: string,
-    inputs: Record<string, unknown>, // usually references to filenames
+    inputs: Record<string, unknown>,
     onProgress: (percent: number, message?: string) => void,
     onLog: (message: string) => void
   ): Promise<Record<string, unknown>> {
-    if (!this.initialized || !this.workerAPI) {
+    if (!this.initialized) {
       throw new Error('WorkerManager is not initialized.');
     }
 
-    // Check OPFS Quota (e.g., require at least 500MB free for safety)
     const hasSpace = await OPFSManager.checkQuota(500 * 1024 * 1024);
     if (!hasSpace) {
       throw new Error('Insufficient storage space in Origin Private File System.');
@@ -76,30 +72,67 @@ export class WorkerManager {
     const workspacePath = `${this.sessionId}/${taskId}`;
 
     try {
-      // 1. Create OPFS Workspace
       await OPFSManager.createWorkspace(this.sessionId, taskId);
-      
-      // Note: User files (from drag & drop) should be written to this workspace
-      // by the UI layer *before* calling convert, OR we can pass File objects
-      // here and write them. For now, we assume inputs contains what the module needs.
 
-      // 2. Prepare context with Comlink Proxy for callbacks
       const context: ExecutionContext = {
         workspacePath,
-        onProgress: Comlink.proxy(onProgress),
-        onLog: Comlink.proxy(onLog),
+        onProgress,
+        onLog,
       };
 
-      // 3. Execute task in Worker
-      const result = await this.workerAPI.executeTask(moduleId, inputs, context);
-      
-      return result;
+      // Decide execution path based on module type
+      if (MAIN_THREAD_MODULES.has(moduleId)) {
+        // Execute directly on main thread (module has its own worker)
+        return await this.executeOnMainThread(moduleId, inputs, context);
+      } else {
+        // Execute via our Comlink worker
+        return await this.executeOnWorker(moduleId, inputs, context);
+      }
     } catch (err) {
       console.error(`[WorkerManager] Task ${taskId} failed:`, err);
       throw err;
     } finally {
-      // 4. Clean up OPFS Workspace
       await OPFSManager.cleanupWorkspace(this.sessionId, taskId);
     }
+  }
+
+  /**
+   * Execute module directly on the main thread.
+   * Used for modules like FFmpeg that create their own internal workers.
+   */
+  private async executeOnMainThread(
+    moduleId: string,
+    inputs: Record<string, unknown>,
+    context: ExecutionContext
+  ): Promise<Record<string, unknown>> {
+    const module = getModuleById(moduleId);
+    if (!module) {
+      throw new Error(`Module '${moduleId}' not found in registry.`);
+    }
+
+    context.onLog(`[WorkerManager] Executing ${module.manifest.name} on main thread`);
+    return await module.execute(inputs, context);
+  }
+
+  /**
+   * Execute module via our Comlink Web Worker.
+   * Used for lighter modules that don't need their own worker.
+   */
+  private async executeOnWorker(
+    moduleId: string,
+    inputs: Record<string, unknown>,
+    context: ExecutionContext
+  ): Promise<Record<string, unknown>> {
+    if (!this.workerAPI) {
+      throw new Error('Worker API is not available.');
+    }
+
+    const proxyContext: ExecutionContext = {
+      workspacePath: context.workspacePath,
+      onProgress: Comlink.proxy(context.onProgress),
+      onLog: Comlink.proxy(context.onLog),
+    };
+
+    return await this.workerAPI.executeTask(moduleId, inputs, proxyContext);
   }
 }

@@ -13,7 +13,7 @@
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test",
     "typecheck": "astro check",
-    "postinstall": "node -e \"const fs = require('fs'); fs.cpSync('node_modules/@ffmpeg/core/dist/umd', 'public', {recursive: true});\""
+    "postinstall": "node -e \"const fs = require('fs'); fs.cpSync('node_modules/@ffmpeg/core/dist/esm', 'public', {recursive: true});\""
   },
   "dependencies": {
     "@astrojs/react": "^4.4.2",

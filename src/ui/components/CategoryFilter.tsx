@@ -1,5 +1,5 @@
-import { CATEGORIES } from '@/lib/formats';
-import { cn } from '@/lib/utils';
+﻿import { CATEGORIES } from '@/lib/formats';
+import { Badge } from '@/ui/components/core';
 
 export function CategoryFilter({
   value,
@@ -11,19 +11,22 @@ export function CategoryFilter({
   return (
     <div className="no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 sm:mx-0 sm:px-0">
       {CATEGORIES.map((c) => (
-        <button
+        <Badge
           key={c.id}
-          type="button"
+          role="button"
+          tabIndex={0}
+          interactive
+          selected={value === c.id}
           onClick={() => onChange(c.id)}
-          className={cn(
-            'focus-ring shrink-0 rounded-sm border px-2.5 py-1 text-[12px] transition-colors',
-            value === c.id
-              ? 'border-primary/40 bg-accent-subtle/30 text-primary'
-              : 'border-border bg-surface text-muted-foreground hover:border-border-strong hover:text-foreground',
-          )}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onChange(c.id);
+            }
+          }}
         >
           {c.label}
-        </button>
+        </Badge>
       ))}
     </div>
   );

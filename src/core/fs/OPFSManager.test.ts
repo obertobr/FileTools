@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -20,7 +20,7 @@ describe('OPFSManager - Zelador (Garbage Collection)', () => {
     };
 
     // Mock navigator.storage.getDirectory
-    Object.defineProperty(global, 'navigator', {
+    Object.defineProperty(globalThis, 'navigator', {
       value: {
         storage: {
           getDirectory: vi.fn().mockResolvedValue(mockRoot),
@@ -46,12 +46,12 @@ describe('OPFSManager - Zelador (Garbage Collection)', () => {
     // Deve checar se a pasta sessions/ existe
     expect(mockRoot.getDirectoryHandle).toHaveBeenCalledWith('sessions', { create: true });
 
-    // Deve deletar session_1 e session_2, mas NÃO session_current
+    // Deve deletar session_1 e session_2, mas NÃƒO session_current
     expect(mockSessionsDir.removeEntry).toHaveBeenCalledWith('session_1', { recursive: true });
     expect(mockSessionsDir.removeEntry).toHaveBeenCalledWith('session_2', { recursive: true });
     expect(mockSessionsDir.removeEntry).not.toHaveBeenCalledWith('session_current', expect.any(Object));
 
-    // Deve criar a pasta da sessão atual
+    // Deve criar a pasta da sessÃ£o atual
     expect(mockSessionsDir.getDirectoryHandle).toHaveBeenCalledWith('session_current', { create: true });
   });
 
@@ -66,3 +66,4 @@ describe('OPFSManager - Zelador (Garbage Collection)', () => {
     expect(hasNoSpace).toBe(false);
   });
 });
+

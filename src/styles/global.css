@@ -1,10 +1,9 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
 @import "tw-animate-css";
 
 /*
- * FileTools design system — dark only.
+ * FileTools design system - dark only.
  * Near-black surfaces, hairline borders, one restrained green accent.
- * Migrated from design-template (Convertly).
  */
 
 @theme inline {
@@ -33,6 +32,7 @@
   --color-accent-subtle: var(--accent-subtle);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--foreground);
+  --color-destructive-subtle: var(--destructive-subtle);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-input: var(--border);
@@ -55,6 +55,7 @@
   --primary-foreground: oklch(0.17 0.02 155);
   --accent-subtle: oklch(0.28 0.05 155);
   --destructive: oklch(0.63 0.17 25);
+  --destructive-subtle: oklch(0.24 0.06 25);
 }
 
 @layer base {

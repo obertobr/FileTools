@@ -1,4 +1,5 @@
-import { Github, Settings } from 'lucide-react';
+﻿import { Github, Settings } from 'lucide-react';
+import { Button } from '@/ui/components/core';
 
 const navItems = [
   { href: '/', label: 'Convert' },
@@ -6,18 +7,18 @@ const navItems = [
 ] as const;
 
 /**
- * Navbar — Astro-compatible version (uses native <a> instead of router Link).
+ * Navbar - Astro-compatible version (uses native <a> instead of router Link).
  * Active state is determined by comparing window.location.pathname at runtime.
  */
 export function Navbar({ activePath }: { activePath?: string }) {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-sm">
       <div className="mx-auto flex h-12 max-w-5xl items-center gap-6 px-4">
-        <a href="/" className="focus-ring flex items-center gap-2 rounded-sm">
-          <span className="grid size-4 place-items-center rounded-[3px] border border-border-strong">
+        <a href="/" className="focus-ring flex items-center gap-2 rounded-sm select-none">
+          <span className="grid size-4 place-items-center rounded-[3px] border border-border-strong bg-surface">
             <span className="size-1.5 rounded-[1px] bg-primary" />
           </span>
-          <span className="text-[13px] font-semibold tracking-tight">FileTools</span>
+          <span className="text-[13px] font-semibold tracking-tight text-foreground">FileTools</span>
         </a>
 
         <nav className="flex items-center gap-1">
@@ -31,9 +32,9 @@ export function Navbar({ activePath }: { activePath?: string }) {
               <a
                 key={item.href}
                 href={item.href}
-                className={`focus-ring rounded-sm px-2 py-1 text-[13px] transition-colors ${
+                className={`focus-ring rounded-sm px-2.5 py-1 text-[13px] transition-colors select-none ${
                   isActive
-                    ? 'text-foreground'
+                    ? 'font-medium text-foreground'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
                 aria-current={isActive ? 'page' : undefined}
@@ -50,17 +51,17 @@ export function Navbar({ activePath }: { activePath?: string }) {
             target="_blank"
             rel="noreferrer"
             aria-label="GitHub repository"
-            className="focus-ring grid size-7 place-items-center rounded-sm text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+            className="focus-ring grid size-8 place-items-center rounded-sm text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
           >
             <Github className="size-4" strokeWidth={1.75} />
           </a>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon-md"
             aria-label="Storage settings"
-            className="focus-ring grid size-7 place-items-center rounded-sm text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
           >
             <Settings className="size-4" strokeWidth={1.75} />
-          </button>
+          </Button>
         </div>
       </div>
     </header>

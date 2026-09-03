@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
+﻿import { useRef, useState } from 'react';
 import { ArrowUp } from 'lucide-react';
+import { Typography } from '@/ui/components/core';
 import { cn } from '@/lib/utils';
 
 export function UploadDropzone({
@@ -38,10 +39,10 @@ export function UploadDropzone({
       tabIndex={0}
       aria-label="Drop a file here or browse your files"
       className={cn(
-        'focus-ring flex cursor-pointer flex-col items-center justify-center rounded-md border border-dashed px-6 py-16 text-center transition-colors sm:py-20',
+        'focus-ring flex cursor-pointer flex-col items-center justify-center rounded-md border border-dashed px-6 py-16 text-center transition-colors sm:py-20 select-none',
         dragging
           ? 'border-primary bg-accent-subtle/20'
-          : 'border-border bg-surface hover:border-border-strong',
+          : 'border-border bg-surface hover:border-border-strong hover:bg-surface/80',
       )}
     >
       <input
@@ -58,17 +59,23 @@ export function UploadDropzone({
       <span
         className={cn(
           'grid size-8 place-items-center rounded-sm border transition-colors',
-          dragging ? 'border-primary text-primary' : 'border-border text-muted-foreground',
+          dragging ? 'border-primary text-primary bg-accent-subtle/30' : 'border-border text-muted-foreground bg-surface-raised',
         )}
       >
         <ArrowUp className="size-4" strokeWidth={1.75} />
       </span>
-      <p className="mt-4 text-[13px] font-medium">Drop a file here</p>
-      <p className="mt-1 text-[13px] text-muted-foreground">or click to browse</p>
-      <p className="mt-6 font-mono text-[11px] text-muted-foreground">{hint}</p>
-      <p className="mt-1.5 font-mono text-[11px] text-muted-foreground/70">
-        Your file stays on your device
-      </p>
+      <Typography variant="body" className="mt-4 font-medium">
+        Drop a file here
+      </Typography>
+      <Typography variant="body" color="muted" className="mt-0.5">
+        or click to browse
+      </Typography>
+      <Typography variant="code" color="muted" className="mt-6">
+        {hint}
+      </Typography>
+      <Typography variant="code" color="muted" className="mt-1 opacity-70">
+        Your file stays on your device (100% local)
+      </Typography>
     </div>
   );
 }

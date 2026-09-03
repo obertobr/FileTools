@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useRef, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { UploadDropzone } from './UploadDropzone';
 import { FilePreview } from './FilePreview';
@@ -7,15 +7,16 @@ import { CategoryFilter } from './CategoryFilter';
 import { FormatSelector } from './FormatSelector';
 import { ConversionProgress } from './ConversionProgress';
 import { DownloadResult } from './DownloadResult';
+import { Button, Card, Typography } from '@/ui/components/core';
 import { FORMATS, describeFile, type Format } from '@/lib/formats';
 import { resolvePossibleConversions } from '@/modules/registry';
 import { WorkerManager } from '@/core/engine/WorkerManager';
-import { OPFSManager } from '@/core/fs/OPFSManager';
 
 type Status = 'idle' | 'converting' | 'done' | 'error';
 
 /**
- * ConvertPanel — Main conversion UI island.
+ * ConvertPanel - Main conversion UI island.
+ * Built strictly on top of FileTools Core Design System components.
  */
 export function ConvertPanel({
   fixedTarget,
@@ -33,10 +34,10 @@ export function ConvertPanel({
   const [status, setStatus] = useState<Status>('idle');
   const [progress, setProgress] = useState(0);
   const [progressMessage, setProgressMessage] = useState<string | undefined>();
+  const [errorMessage, setErrorMessage] = useState<string>('');
   const [outputUrl, setOutputUrl] = useState<string | null>(null);
   const [outputSize, setOutputSize] = useState<number>(0);
   
-  // Track which module supports the selected target
   const activeModuleId = useRef<string | null>(null);
 
   const target = fixedTarget ?? selected;
@@ -44,19 +45,19 @@ export function ConvertPanel({
 
   // Resolve possible conversions dynamically from the module registry
   const availableFormats: Format[] = (() => {
-    if (sourceExt) {
-      const possible = resolvePossibleConversions(sourceExt);
+    if (sourceExt && file) {
+      const possible = resolvePossibleConversions(sourceExt, file.type);
       const targetExts = new Set<string>();
       const extToModule = new Map<string, string>();
       
       possible.forEach(p => {
         p.toExtensions.forEach(ext => {
-          targetExts.add(ext);
-          extToModule.set(ext, p.moduleId);
+          const normalizedExt = ext.replace('.', '').toUpperCase();
+          targetExts.add(normalizedExt);
+          extToModule.set(normalizedExt, p.moduleId);
         });
       });
 
-      // Update the active module if a target is selected
       if (target && extToModule.has(target)) {
         activeModuleId.current = extToModule.get(target)!;
       } else {
@@ -64,7 +65,7 @@ export function ConvertPanel({
       }
 
       return FORMATS
-        .filter(f => targetExts.has(f.ext))
+        .filter(f => targetExts.has(f.ext) && f.ext !== sourceExt)
         .filter((c) => {
           const matchesCategory = category === 'all' || c.category === category;
           const matchesQuery =
@@ -74,7 +75,6 @@ export function ConvertPanel({
         });
     }
     
-    // No file yet — show all formats filtered by UI controls
     return FORMATS.filter(
       (f) =>
         f.ext !== sourceExt &&
@@ -89,6 +89,7 @@ export function ConvertPanel({
     setStatus('idle');
     setProgress(0);
     setProgressMessage(undefined);
+    setErrorMessage('');
     if (outputUrl) URL.revokeObjectURL(outputUrl);
     setOutputUrl(null);
     setOutputSize(0);
@@ -99,18 +100,22 @@ export function ConvertPanel({
     if (!file || !target || !activeModuleId.current) return;
     setStatus('converting');
     setProgress(0);
-    setProgressMessage(`Initializing conversion to ${target}…`);
+    setProgressMessage(`Preparing file...`);
+    setErrorMessage('');
     
     try {
+      const arrayBuffer = await file.arrayBuffer();
+      const fileData = new Uint8Array(arrayBuffer);
+
       const manager = WorkerManager.getInstance();
       await manager.initialize();
       
       const result = await manager.convert(
         activeModuleId.current,
         { 
-          file: file, // We pass the file; WorkerManager/Worker handles writing it to OPFS or directly. Wait, the mock expects file directly.
-          targetFormat: target,
-          originalName: file.name
+          fileData: fileData,
+          targetFormat: '.' + target.toLowerCase(),
+          originalName: file.name,
         },
         (p, msg) => {
           setProgress(p);
@@ -121,28 +126,27 @@ export function ConvertPanel({
         }
       );
       
-      // In the real module (Step 3), result will contain the File or FileSystemFileHandle.
-      // For now, mock a success Blob URL if there isn't a real file returned.
-      if (result && result.outputFile instanceof File) {
-        setOutputUrl(URL.createObjectURL(result.outputFile));
-        setOutputSize(result.outputFile.size);
-      } else {
-        // Mock Blob for testing
-        const blob = new Blob(['Mock conversion result for ' + file.name], { type: 'application/octet-stream' });
+      if (result && result.outputData) {
+        const outputData = result.outputData as Uint8Array;
+        const mimeType = (result.mimeType as string) || 'application/octet-stream';
+        const blob = new Blob([outputData as unknown as BlobPart], { type: mimeType });
         setOutputUrl(URL.createObjectURL(blob));
-        setOutputSize(blob.size);
+        setOutputSize(outputData.byteLength);
+      } else {
+        throw new Error('No output data returned from conversion module.');
       }
       
       setStatus('done');
       setProgressMessage(undefined);
     } catch (error) {
-      console.error(error);
+      console.error('[ConvertPanel] Conversion failed:', error);
+      setErrorMessage(error instanceof Error ? error.message : String(error));
       setStatus('error');
     }
   }
 
   const outputName =
-    file && target ? `${file.name.replace(/\.[^.]+$/, '')}${target.toLowerCase()}` : '';
+    file && target ? `${file.name.replace(/\.[^.]+$/, '')}.${target.toLowerCase()}` : '';
 
   if (!file) {
     return (
@@ -160,22 +164,24 @@ export function ConvertPanel({
 
       {status === 'idle' && !fixedTarget && (
         <section className="space-y-3">
-          <h2 className="text-[13px] font-medium">Convert to</h2>
-          <SearchInput value={query} onChange={setQuery} placeholder="Search formats…" />
+          <Typography variant="h2" as="h2">
+            Convert to
+          </Typography>
+          <SearchInput value={query} onChange={setQuery} placeholder="Search formats..." />
           <CategoryFilter value={category} onChange={setCategory} />
           <FormatSelector formats={availableFormats} selected={selected} onSelect={setSelected} />
         </section>
       )}
 
       {status === 'idle' && (
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="md"
           disabled={!target}
           onClick={start}
-          className="focus-ring inline-flex h-9 items-center rounded-sm bg-primary px-4 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-raised disabled:text-muted-foreground"
         >
           {target ? `Convert to ${target}` : 'Select a format'}
-        </button>
+        </Button>
       )}
 
       {status === 'converting' && (
@@ -196,24 +202,26 @@ export function ConvertPanel({
       )}
 
       {status === 'error' && (
-        <div className="rounded-md border border-destructive/40 bg-surface px-3 py-3">
+        <Card variant="alert-destructive" className="px-3.5 py-3">
           <div className="flex items-center gap-2">
-            <AlertCircle className="size-4 text-destructive" strokeWidth={1.75} />
-            <p className="text-[13px] font-medium">Conversion failed</p>
+            <AlertCircle className="size-4 text-destructive shrink-0" strokeWidth={1.75} />
+            <Typography variant="body" className="font-medium text-foreground">
+              Conversion failed
+            </Typography>
           </div>
-          <p className="mt-1.5 font-mono text-[11px] text-muted-foreground">
-            The file could not be processed. Try another file.
-          </p>
-          <button
-            type="button"
+          <Typography variant="code" color="muted" className="mt-1.5 block">
+            {errorMessage || 'The file could not be processed. Try another file.'}
+          </Typography>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={reset}
-            className="focus-ring mt-3 inline-flex h-8 items-center rounded-sm border border-border bg-surface px-3 text-[12px] text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground"
+            className="mt-3"
           >
             Start over
-          </button>
-        </div>
+          </Button>
+        </Card>
       )}
     </div>
   );
 }
-

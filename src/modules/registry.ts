@@ -1,4 +1,4 @@
-/**
+﻿/**
  * src/modules/registry.ts
  *
  * Central registry for all conversion modules.
@@ -8,8 +8,6 @@
 
 import type { IModule, ConversionRule, ModuleManifest } from '@/shared/types/module';
 
-// We will import the actual modules later. For now, we will dynamically or statically
-// map the available engines.
 import { FFmpegModule } from './ffmpeg';
 import { MagickModule } from './magick';
 import { PdfModule } from './pdf';
@@ -40,32 +38,43 @@ export function getModuleById(id: string): IModule | undefined {
 
 export interface PossibleConversion {
   moduleId: string;
-  fromPattern: string; // The specific pattern that matched the file
-  toExtensions: string[]; // Possible output extensions
+  fromPattern: string;
+  toExtensions: string[];
 }
 
 /**
- * Given a file extension (e.g., '.mp4') or MIME type (e.g., 'video/mp4'),
+ * Given a file extension (e.g., '.mp4', 'MP4', 'mp4') or MIME type (e.g., 'video/mp4'),
  * resolves which modules and output formats are supported.
  * 
- * @param fileIdentifier Extension (e.g. '.mp4') or MIME type
+ * Normalizes the input to handle both uppercase formats from the UI (e.g. 'MP4')
+ * and dotted extensions (e.g. '.mp4').
  */
-export function resolvePossibleConversions(fileIdentifier: string): PossibleConversion[] {
-  const identifierLower = fileIdentifier.toLowerCase();
+export function resolvePossibleConversions(fileIdentifier: string, mimeType?: string): PossibleConversion[] {
   const results: PossibleConversion[] = [];
+  
+  // Normalize the extension: 'MP4' -> '.mp4', '.MP4' -> '.mp4', 'mp4' -> '.mp4'
+  let normalizedExt = fileIdentifier.toLowerCase();
+  if (!normalizedExt.startsWith('.')) {
+    normalizedExt = '.' + normalizedExt;
+  }
+  
+  const normalizedMime = mimeType?.toLowerCase() || '';
 
   for (const module of Object.values(ModuleRegistry)) {
     const manifest = module.manifest;
     
     for (const rule of manifest.supportedConversions) {
-      // Check if any of the 'from' rules match our file identifier
       const matchedPattern = rule.from.find(pattern => {
-        if (pattern.includes('*')) {
-          // Wildcard match, e.g., 'video/*' matches 'video/mp4'
-          const prefix = pattern.split('*')[0];
-          return identifierLower.startsWith(prefix);
+        const patternLower = pattern.toLowerCase();
+        
+        if (patternLower.includes('*')) {
+          // Wildcard MIME match: 'video/*' matches 'video/mp4'
+          const prefix = patternLower.split('*')[0];
+          return normalizedMime.startsWith(prefix);
         }
-        return pattern === identifierLower;
+        
+        // Exact extension match: '.docx' matches '.docx'
+        return patternLower === normalizedExt;
       });
 
       if (matchedPattern) {
