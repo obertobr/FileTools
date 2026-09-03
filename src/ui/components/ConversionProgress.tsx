@@ -20,8 +20,17 @@ export function ConversionProgress({
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const logEndRef = useRef<HTMLDivElement>(null);
 
+  // Parse speed metadata if present: e.g. "Codificando vídeo... 45% [spd:2.5x]"
+  let speed: string | null = null;
+  let cleanMessage = message || `Processando conversão para ${target}...`;
+  const speedMatch = cleanMessage.match(/\[spd:\s*([\d.]+x)\]/);
+  if (speedMatch) {
+    speed = speedMatch[1];
+    cleanMessage = cleanMessage.replace(/\[spd:\s*[\d.]+x\]/, '').trim();
+  }
+
   const roundedProgress = Math.round(progress);
-  const isIndeterminate = roundedProgress <= 5;
+  const hasPercentage = roundedProgress > 0 && roundedProgress <= 100;
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -53,37 +62,51 @@ export function ConversionProgress({
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           <Typography variant="body" className="font-medium truncate">
-            {message || `Processando conversão para ${target}...`}
+            {cleanMessage}
           </Typography>
-          <Typography variant="caption" color="muted" className="mt-0.5 block">
-            Tempo decorrido: {formatTime(elapsedSeconds)}
-          </Typography>
+          <div className="flex items-center gap-2 mt-0.5">
+            <Typography variant="caption" color="muted">
+              Tempo decorrido: {formatTime(elapsedSeconds)}
+            </Typography>
+            {speed && (
+              <>
+                <span className="text-border text-xs">•</span>
+                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[11px] font-mono font-medium bg-surface-raised border border-border text-muted-foreground">
+                  {speed} vel.
+                </span>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="shrink-0 text-right">
-          {roundedProgress > 0 && (
+          {hasPercentage ? (
             <Typography variant="code" color="primary" className="font-bold text-sm">
               {roundedProgress}%
+            </Typography>
+          ) : (
+            <Typography variant="caption" color="muted" className="text-xs italic">
+              Processando...
             </Typography>
           )}
         </div>
       </div>
 
-      {/* Progress Bar */}
+      {/* Progress Bar: Fills if percentage available, indeterminate if not */}
       <div
         role="progressbar"
-        aria-valuenow={roundedProgress}
+        aria-valuenow={hasPercentage ? roundedProgress : undefined}
         aria-valuemin={0}
         aria-valuemax={100}
         className="h-1.5 w-full overflow-hidden rounded-full bg-surface"
       >
-        {isIndeterminate ? (
-          <div className="h-full w-full bg-gradient-to-r from-primary/20 via-primary to-primary/20 animate-[pulse_1.5s_ease-in-out_infinite]" />
-        ) : (
+        {hasPercentage ? (
           <div
             className="h-full bg-primary transition-[width] duration-300 ease-out"
             style={{ width: `${roundedProgress}%` }}
           />
+        ) : (
+          <div className="h-full w-full bg-gradient-to-r from-primary/20 via-primary to-primary/20 animate-[pulse_1.5s_ease-in-out_infinite]" />
         )}
       </div>
 

@@ -124,13 +124,13 @@ export class WorkerManager {
       throw new Error('Worker API não está disponível.');
     }
 
-    const proxyContext: ExecutionContext = {
-      workspacePath: context.workspacePath,
-      onProgress: Comlink.proxy(context.onProgress),
-      onLog: Comlink.proxy(context.onLog),
-    };
-
-    return await this.workerAPI.executeTask(moduleId, inputs, proxyContext);
+    return await this.workerAPI.executeTask(
+      moduleId,
+      inputs,
+      context.workspacePath,
+      Comlink.proxy(context.onProgress),
+      Comlink.proxy(context.onLog)
+    );
   }
 }
 

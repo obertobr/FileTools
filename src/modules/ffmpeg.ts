@@ -11,24 +11,67 @@ import type { IModule, ExecutionContext } from '@/shared/types/module';
 
 let ffmpegInstance: FFmpeg | null = null;
 let ffmpegLoaded = false;
+let currentContext: ExecutionContext | null = null;
+let totalDuration = 0;
+let currentSpeed = '';
+
+function parseDurationSeconds(message: string): number | null {
+  const durMatch = message.match(/Duration:\s*(\d{2}):(\d{2}):(\d{2})\.(\d{2})/);
+  if (!durMatch) return null;
+  const h = parseInt(durMatch[1], 10);
+  const m = parseInt(durMatch[2], 10);
+  const s = parseInt(durMatch[3], 10);
+  const cs = parseInt(durMatch[4], 10);
+  return h * 3600 + m * 60 + s + cs / 100;
+}
+
+function parseCurrentTimeSeconds(message: string): number | null {
+  const timeMatch = message.match(/time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})/);
+  if (!timeMatch) return null;
+  const h = parseInt(timeMatch[1], 10);
+  const m = parseInt(timeMatch[2], 10);
+  const s = parseInt(timeMatch[3], 10);
+  const cs = parseInt(timeMatch[4], 10);
+  return h * 3600 + m * 60 + s + cs / 100;
+}
 
 async function getFFmpeg(context: ExecutionContext): Promise<FFmpeg> {
+  currentContext = context;
   if (ffmpegInstance && ffmpegLoaded) return ffmpegInstance;
 
   ffmpegInstance = new FFmpeg();
 
   ffmpegInstance.on('log', ({ message }) => {
-    context.onLog(`[FFmpeg] ${message}`);
+    currentContext?.onLog(`[FFmpeg] ${message}`);
+
+    if (message.includes('Duration:')) {
+      const dur = parseDurationSeconds(message);
+      if (dur && dur > 0) totalDuration = dur;
+    }
+
+    if (message.includes('time=')) {
+      const cur = parseCurrentTimeSeconds(message);
+      const speedMatch = message.match(/speed=\s*([\d.]+x)/);
+      if (speedMatch) currentSpeed = speedMatch[1];
+
+      if (cur !== null && totalDuration > 0 && currentContext) {
+        const percent = Math.min(99, Math.max(1, Math.round((cur / totalDuration) * 100)));
+        const speedTag = currentSpeed ? ` [spd:${currentSpeed}]` : '';
+        currentContext.onProgress(percent, `Codificando... ${percent}%${speedTag}`);
+      }
+    }
   });
 
-  ffmpegInstance.on('progress', ({ progress, time }) => {
-    const percent = Math.min(Math.round(progress * 100), 99);
-    const timeSec = (time / 1_000_000).toFixed(1);
-    context.onProgress(percent, `Processing... ${timeSec}s encoded`);
+  ffmpegInstance.on('progress', ({ progress }) => {
+    const percent = Math.min(99, Math.round(progress * 100));
+    if (percent > 0 && currentContext) {
+      const speedTag = currentSpeed ? ` [spd:${currentSpeed}]` : '';
+      currentContext.onProgress(percent, `Codificando... ${percent}%${speedTag}`);
+    }
   });
 
-  context.onLog('[FFmpeg] Loading ffmpeg-core.wasm...');
-  context.onProgress(0, 'Loading FFmpeg engine...');
+  context.onLog('[FFmpeg] Carregando ffmpeg-core.wasm...');
+  context.onProgress(0, 'Carregando motor FFmpeg...');
 
   const origin = typeof self !== 'undefined' && self.location ? self.location.origin : '';
   const coreURL = await toBlobURL(`${origin}/ffmpeg-core.js`, 'text/javascript');
@@ -37,7 +80,7 @@ async function getFFmpeg(context: ExecutionContext): Promise<FFmpeg> {
   await ffmpegInstance.load({ coreURL, wasmURL });
 
   ffmpegLoaded = true;
-  context.onLog('[FFmpeg] Engine loaded successfully.');
+  context.onLog('[FFmpeg] Motor carregado com sucesso.');
   return ffmpegInstance;
 }
 
@@ -84,8 +127,8 @@ export const FFmpegModule: IModule = {
   manifest: {
     id: 'ffmpeg-core',
     name: 'FFmpeg WASM (Single-Thread)',
-    version: '0.12.15',
-    description: 'Conversão confiável em CPU single-thread com alta compatibilidade.',
+    version: '0.12.10',
+    description: 'Motor de conversão de mídia local em CPU single-thread com alta compatibilidade.',
     category: 'video',
     supportedConversions: [
       {
@@ -114,6 +157,10 @@ export const FFmpegModule: IModule = {
   },
 
   execute: async (inputs, context) => {
+    currentContext = context;
+    totalDuration = 0;
+    currentSpeed = '';
+
     const fileData = inputs.fileData as Uint8Array;
     const originalName = inputs.originalName as string;
     const targetFormat = inputs.targetFormat as string;
@@ -123,50 +170,59 @@ export const FFmpegModule: IModule = {
     }
 
     const inputExt = '.' + originalName.split('.').pop()!.toLowerCase();
-    const outputExt = targetFormat.startsWith('.') ? targetFormat.toLowerCase() : '.' + targetFormat.toLowerCase();
+    const outputExt = '.' + targetFormat.replace(/^\.+/, '').toLowerCase();
     const outputFileName = originalName.replace(/\.[^.]+$/, '') + outputExt;
 
     context.onLog(`[FFmpeg] Converting ${originalName} -> ${outputFileName}`);
 
     const ffmpeg = await getFFmpeg(context);
-
     const inputPath = `input${inputExt}`;
     const outputPath = `output${outputExt}`;
 
-    context.onProgress(5, 'Writing input file...');
-    await ffmpeg.writeFile(inputPath, fileData);
+    try {
+      context.onProgress(0, 'Carregando arquivo...');
+      await ffmpeg.writeFile(inputPath, fileData);
 
-    const convArgs = getConversionArgs(inputExt, outputExt);
-    const fullArgs = ['-i', inputPath, ...convArgs, outputPath];
+      const convArgs = getConversionArgs(inputExt, outputExt);
+      const fullArgs = ['-i', inputPath, '-stats', ...convArgs, outputPath];
 
-    context.onLog(`[FFmpeg] Executing: ffmpeg ${fullArgs.join(' ')}`);
-    context.onProgress(10, 'Starting conversion...');
+      context.onLog(`[FFmpeg] Executing: ffmpeg ${fullArgs.join(' ')}`);
+      context.onProgress(0, 'Processando...');
 
-    const exitCode = await ffmpeg.exec(fullArgs);
+      const exitCode = await ffmpeg.exec(fullArgs);
 
-    if (exitCode !== 0) {
-      try { await ffmpeg.deleteFile(inputPath); } catch (_e) { /* noop */ }
-      throw new Error(`FFmpeg exited with code ${exitCode}. Check logs for details.`);
+      if (exitCode !== 0) {
+        throw new Error(`FFmpeg finalizou com código de erro ${exitCode}. Verifique os logs para detalhes.`);
+      }
+
+      context.onProgress(98, 'Finalizando...');
+      const outputData = await ffmpeg.readFile(outputPath);
+
+      if (typeof outputData === 'string') {
+        throw new Error('Retorno inesperado do FFmpeg. Esperado Uint8Array.');
+      }
+
+      context.onProgress(100, 'Conversão concluída!');
+      context.onLog(`[FFmpeg] Sucesso: ${outputFileName} (${outputData.byteLength} bytes)`);
+
+      return {
+        outputData: outputData,
+        outputFileName: outputFileName,
+        outputSize: outputData.byteLength,
+        mimeType: getMimeType(outputExt),
+      };
+    } finally {
+      try {
+        await ffmpeg.deleteFile(inputPath);
+      } catch (_e) {
+        /* noop */
+      }
+      try {
+        await ffmpeg.deleteFile(outputPath);
+      } catch (_e) {
+        /* noop */
+      }
+      currentContext = null;
     }
-
-    context.onProgress(95, 'Reading output file...');
-    const outputData = await ffmpeg.readFile(outputPath);
-
-    try { await ffmpeg.deleteFile(inputPath); } catch (_e) { /* noop */ }
-    try { await ffmpeg.deleteFile(outputPath); } catch (_e) { /* noop */ }
-
-    if (typeof outputData === 'string') {
-      throw new Error('Unexpected string output from FFmpeg. Expected Uint8Array.');
-    }
-
-    context.onProgress(100, 'Conversion complete!');
-    context.onLog(`[FFmpeg] Output: ${outputFileName} (${(outputData.byteLength / 1024 / 1024).toFixed(2)} MB)`);
-
-    return {
-      outputData: outputData,
-      outputFileName: outputFileName,
-      outputSize: outputData.byteLength,
-      mimeType: getMimeType(outputExt),
-    };
   },
 };

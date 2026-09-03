@@ -1,4 +1,4 @@
-﻿import { useRef, useState } from 'react';
+﻿import { useRef, useState, useEffect } from 'react';
 import { ArrowUp } from 'lucide-react';
 import { Typography } from '@/ui/components/core';
 import { cn } from '@/lib/utils';
@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 export function UploadDropzone({
   onFile,
   accept,
-  hint = 'Supports many file formats',
+  hint = 'Suporta dezenas de formatos populares',
 }: {
   onFile: (file: File) => void;
   accept?: string | undefined;
@@ -14,9 +14,15 @@ export function UploadDropzone({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   return (
     <div
+      data-hydrated={hydrated}
       onDragOver={(e) => {
         e.preventDefault();
         setDragging(true);

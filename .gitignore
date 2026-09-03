@@ -32,3 +32,6 @@ test-results/
 
 # Design template (source of truth migrated to src/)
 /design-template
+# Test fixtures (generated sample files)
+tests/fixtures/
+

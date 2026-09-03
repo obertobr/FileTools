@@ -147,7 +147,7 @@ export function ConvertPanel({
         engineToUse.moduleId,
         { 
           fileData: fileData,
-          targetFormat: '.' + target.toLowerCase(),
+          targetFormat: '.' + target.replace(/^\.+/, '').toLowerCase(),
           originalName: file.name,
         },
         (p, msg) => {
@@ -181,7 +181,7 @@ export function ConvertPanel({
   }
 
   const outputName =
-    file && target ? `${file.name.replace(/\.[^.]+$/, '')}.${target.toLowerCase()}` : '';
+    file && target ? file.name.replace(/\.[^.]+$/, '') + '.' + target.replace(/^\./, '').toLowerCase() : '';
 
   if (!file) {
     return (
@@ -337,3 +337,4 @@ export function ConvertPanel({
     </div>
   );
 }
+
