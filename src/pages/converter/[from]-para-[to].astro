@@ -1,4 +1,4 @@
----
+﻿---
 import Layout from '@/layouts/Layout.astro';
 import { ConvertPanel } from '@/ui/components/ConvertPanel';
 import { getAllManifests } from '@/modules/registry';
@@ -14,15 +14,18 @@ export async function getStaticPaths() {
         let validFroms: string[] = [];
         
         if (fromType.includes('*')) {
-          const prefix = fromType.split('*')[0].toLowerCase();
-          validFroms = FORMATS.filter(f => f.category === prefix || f.ext.toLowerCase().startsWith(prefix)).map(f => f.ext.replace('.', ''));
+          // Extract category: 'video/*' -> 'video', 'audio/*' -> 'audio'
+          const category = fromType.split('/')[0].toLowerCase();
+          validFroms = FORMATS
+            .filter(f => f.category === category)
+            .map(f => f.ext.toLowerCase().replace('.', ''));
         } else {
-          validFroms = [fromType.replace('.', '')];
+          validFroms = [fromType.toLowerCase().replace('.', '')];
         }
 
         for (const from of validFroms) {
           for (const toExt of rule.to) {
-            const to = toExt.replace('.', '');
+            const to = toExt.toLowerCase().replace('.', '');
             if (from !== to) {
               paths.push({
                 params: { from, to },
@@ -44,13 +47,19 @@ const { from, to } = Astro.params;
 const targetExt = `.${to}`;
 ---
 
-<Layout title={`Converter ${from.toUpperCase()} para ${to.toUpperCase()} - FileTools`}>
-  <h1 class="text-[15px] font-medium tracking-tight">Converter {from.toUpperCase()} para {to.toUpperCase()}</h1>
-  <p class="mt-1 text-[13px] text-muted-foreground">
-    Converta seu arquivo {from.toUpperCase()} para {to.toUpperCase()} rapidamente sem enviar para nenhum servidor.
-  </p>
-  <div class="mt-6">
-    <ConvertPanel client:load fixedTarget={targetExt} accept={`.${from}`} />
+<Layout
+  title={`Converter ${from?.toUpperCase()} para ${to?.toUpperCase()} - FileTools`}
+  description={`Converta arquivos de ${from?.toUpperCase()} para ${to?.toUpperCase()} com aceleração local no navegador, sem upload de arquivos.`}
+>
+  <div class="mx-auto max-w-5xl">
+    <h1 class="text-[15px] font-medium tracking-tight text-foreground">
+      Converter {from?.toUpperCase()} para {to?.toUpperCase()}
+    </h1>
+    <p class="mt-1 text-[13px] text-muted-foreground">
+      Converta seu arquivo {from?.toUpperCase()} para {to?.toUpperCase()} rapidamente com aceleração de hardware (GPU ou CPU multi-thread).
+    </p>
+    <div class="mt-6">
+      <ConvertPanel client:load fixedTarget={targetExt} accept={`.${from}`} />
+    </div>
   </div>
 </Layout>
-

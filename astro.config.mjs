@@ -6,6 +6,12 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig({
   output: 'static',
   integrations: [react()],
+  server: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
+  },
   vite: {
     optimizeDeps: {
       exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],

@@ -1,23 +1,20 @@
-﻿import { useRef, useState } from 'react';
-import { AlertCircle } from 'lucide-react';
+﻿import { useState, useEffect } from 'react';
+import { AlertCircle, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
 import { UploadDropzone } from './UploadDropzone';
 import { FilePreview } from './FilePreview';
 import { SearchInput } from './SearchInput';
 import { CategoryFilter } from './CategoryFilter';
 import { FormatSelector } from './FormatSelector';
+import { EngineSelector } from './EngineSelector';
 import { ConversionProgress } from './ConversionProgress';
 import { DownloadResult } from './DownloadResult';
 import { Button, Card, Typography } from '@/ui/components/core';
 import { FORMATS, describeFile, type Format } from '@/lib/formats';
-import { resolvePossibleConversions } from '@/modules/registry';
+import { resolvePossibleConversions, resolveAvailableEngines, type EngineOption } from '@/modules/registry';
 import { WorkerManager } from '@/core/engine/WorkerManager';
 
 type Status = 'idle' | 'converting' | 'done' | 'error';
 
-/**
- * ConvertPanel - Main conversion UI island.
- * Built strictly on top of FileTools Core Design System components.
- */
 export function ConvertPanel({
   fixedTarget,
   accept,
@@ -31,14 +28,17 @@ export function ConvertPanel({
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
   const [selected, setSelected] = useState<string | null>(fixedTarget ?? null);
+  const [availableEngines, setAvailableEngines] = useState<EngineOption[]>([]);
+  const [selectedEngineId, setSelectedEngineId] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>('idle');
   const [progress, setProgress] = useState(0);
   const [progressMessage, setProgressMessage] = useState<string | undefined>();
+  const [logs, setLogs] = useState<string[]>([]);
+  const [showErrorLogs, setShowErrorLogs] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [failedEngineName, setFailedEngineName] = useState<string>('');
   const [outputUrl, setOutputUrl] = useState<string | null>(null);
   const [outputSize, setOutputSize] = useState<number>(0);
-  
-  const activeModuleId = useRef<string | null>(null);
 
   const target = fixedTarget ?? selected;
   const sourceExt = file ? describeFile(file.name).ext : null;
@@ -48,21 +48,13 @@ export function ConvertPanel({
     if (sourceExt && file) {
       const possible = resolvePossibleConversions(sourceExt, file.type);
       const targetExts = new Set<string>();
-      const extToModule = new Map<string, string>();
       
       possible.forEach(p => {
         p.toExtensions.forEach(ext => {
           const normalizedExt = ext.replace('.', '').toUpperCase();
           targetExts.add(normalizedExt);
-          extToModule.set(normalizedExt, p.moduleId);
         });
       });
-
-      if (target && extToModule.has(target)) {
-        activeModuleId.current = extToModule.get(target)!;
-      } else {
-        activeModuleId.current = null;
-      }
 
       return FORMATS
         .filter(f => targetExts.has(f.ext) && f.ext !== sourceExt)
@@ -84,24 +76,65 @@ export function ConvertPanel({
     );
   })();
 
+  // Asynchronously probe client hardware and resolve truly compatible engines
+  useEffect(() => {
+    let isCurrent = true;
+    if (sourceExt && target) {
+      resolveAvailableEngines(sourceExt, target, file?.type).then((engines) => {
+        if (isCurrent) {
+          setAvailableEngines(engines);
+          if (engines.length > 0) {
+            setSelectedEngineId((prev) => {
+              const stillExists = engines.some((e) => e.moduleId === prev);
+              return stillExists ? prev : engines[0].moduleId;
+            });
+          } else {
+            setSelectedEngineId(null);
+          }
+        }
+      });
+    } else {
+      setAvailableEngines([]);
+      setSelectedEngineId(null);
+    }
+    return () => {
+      isCurrent = false;
+    };
+  }, [sourceExt, target, file]);
+
+  const activeEngine = availableEngines.find((e) => e.moduleId === selectedEngineId) ?? availableEngines[0];
+
   function reset() {
     setFile(null);
     setStatus('idle');
     setProgress(0);
     setProgressMessage(undefined);
+    setLogs([]);
+    setShowErrorLogs(false);
     setErrorMessage('');
+    setFailedEngineName('');
+    setSelectedEngineId(null);
     if (outputUrl) URL.revokeObjectURL(outputUrl);
     setOutputUrl(null);
     setOutputSize(0);
     if (!fixedTarget) setSelected(null);
   }
 
-  async function start() {
-    if (!file || !target || !activeModuleId.current) return;
+  async function start(overrideEngineId?: string) {
+    if (!file || !target) return;
+    const engineToUse = overrideEngineId 
+      ? (availableEngines.find(e => e.moduleId === overrideEngineId) ?? activeEngine)
+      : activeEngine;
+
+    if (!engineToUse) return;
+
     setStatus('converting');
     setProgress(0);
-    setProgressMessage(`Preparing file...`);
+    setProgressMessage(`Iniciando motor ${engineToUse.moduleName}...`);
+    setLogs([]);
+    setShowErrorLogs(false);
     setErrorMessage('');
+    setFailedEngineName('');
     
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -111,7 +144,7 @@ export function ConvertPanel({
       await manager.initialize();
       
       const result = await manager.convert(
-        activeModuleId.current,
+        engineToUse.moduleId,
         { 
           fileData: fileData,
           targetFormat: '.' + target.toLowerCase(),
@@ -122,6 +155,7 @@ export function ConvertPanel({
           if (msg) setProgressMessage(msg);
         },
         (msg) => {
+          setLogs((prev) => [...prev.slice(-150), msg]);
           console.debug(msg);
         }
       );
@@ -133,13 +167,14 @@ export function ConvertPanel({
         setOutputUrl(URL.createObjectURL(blob));
         setOutputSize(outputData.byteLength);
       } else {
-        throw new Error('No output data returned from conversion module.');
+        throw new Error('Nenhum dado de saída retornado pelo motor de conversão.');
       }
       
       setStatus('done');
       setProgressMessage(undefined);
     } catch (error) {
-      console.error('[ConvertPanel] Conversion failed:', error);
+      console.error(`[ConvertPanel] Falha no motor ${engineToUse.moduleName}:`, error);
+      setFailedEngineName(engineToUse.moduleName);
       setErrorMessage(error instanceof Error ? error.message : String(error));
       setStatus('error');
     }
@@ -151,9 +186,12 @@ export function ConvertPanel({
   if (!file) {
     return (
       <UploadDropzone
-        onFile={(f) => setFile(f)}
+        onFile={(f) => {
+          setFile(f);
+          setSelectedEngineId(null);
+        }}
         accept={accept}
-        hint={hint ?? 'Supports many file formats'}
+        hint={hint ?? 'Suporta dezenas de formatos populares'}
       />
     );
   }
@@ -165,22 +203,37 @@ export function ConvertPanel({
       {status === 'idle' && !fixedTarget && (
         <section className="space-y-3">
           <Typography variant="h2" as="h2">
-            Convert to
+            Converter para
           </Typography>
-          <SearchInput value={query} onChange={setQuery} placeholder="Search formats..." />
+          <SearchInput value={query} onChange={setQuery} placeholder="Buscar formato..." />
           <CategoryFilter value={category} onChange={setCategory} />
-          <FormatSelector formats={availableFormats} selected={selected} onSelect={setSelected} />
+          <FormatSelector
+            formats={availableFormats}
+            selected={selected}
+            onSelect={(ext) => {
+              setSelected(ext);
+              setSelectedEngineId(null);
+            }}
+          />
         </section>
+      )}
+
+      {status === 'idle' && target && availableEngines.length > 0 && (
+        <EngineSelector
+          engines={availableEngines}
+          selectedEngineId={activeEngine?.moduleId ?? null}
+          onSelectEngine={setSelectedEngineId}
+        />
       )}
 
       {status === 'idle' && (
         <Button
           variant="primary"
           size="md"
-          disabled={!target}
-          onClick={start}
+          disabled={!target || !activeEngine}
+          onClick={() => start()}
         >
-          {target ? `Convert to ${target}` : 'Select a format'}
+          {target ? `Converter para ${target}` : 'Selecione um formato'}
         </Button>
       )}
 
@@ -189,6 +242,7 @@ export function ConvertPanel({
           progress={progress}
           target={target ?? ''}
           message={progressMessage}
+          logs={logs}
         />
       )}
 
@@ -202,24 +256,82 @@ export function ConvertPanel({
       )}
 
       {status === 'error' && (
-        <Card variant="alert-destructive" className="px-3.5 py-3">
+        <Card variant="alert-destructive" className="px-4 py-3.5 space-y-3">
           <div className="flex items-center gap-2">
             <AlertCircle className="size-4 text-destructive shrink-0" strokeWidth={1.75} />
             <Typography variant="body" className="font-medium text-foreground">
-              Conversion failed
+              Falha na conversão com {failedEngineName || 'o motor selecionado'}
             </Typography>
           </div>
-          <Typography variant="code" color="muted" className="mt-1.5 block">
-            {errorMessage || 'The file could not be processed. Try another file.'}
+
+          <Typography variant="code" color="muted" className="text-[12px] block">
+            {errorMessage || 'O arquivo não pôde ser processado por este motor.'}
           </Typography>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={reset}
-            className="mt-3"
-          >
-            Start over
-          </Button>
+
+          {/* User Decision: Offer alternate compatible engines if available */}
+          {availableEngines.filter(e => e.moduleName !== failedEngineName).length > 0 && (
+            <div className="pt-1">
+              <Typography variant="caption" color="muted" className="mb-2 block font-medium">
+                Deseja tentar com outro motor compatível?
+              </Typography>
+              <div className="flex flex-wrap gap-2">
+                {availableEngines
+                  .filter(e => e.moduleName !== failedEngineName)
+                  .map(engine => (
+                    <Button
+                      key={engine.moduleId}
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedEngineId(engine.moduleId);
+                        start(engine.moduleId);
+                      }}
+                    >
+                      {engine.acceleration === 'instant-copy' && '⚡ '}
+                      {engine.acceleration === 'cpu-multithread' && '🚀 '}
+                      {engine.acceleration === 'gpu' && '⚡ '}
+                      {engine.acceleration === 'cpu-singlethread' && '💻 '}
+                      Usar {engine.moduleName}
+                    </Button>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* Log Viewer Toggle in Error State */}
+          {logs.length > 0 && (
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setShowErrorLogs(!showErrorLogs)}
+                className="focus-ring flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Terminal className="size-3" />
+                <span>{showErrorLogs ? 'Ocultar Logs de Erro' : 'Ver Logs Técnicos do Motor'}</span>
+                {showErrorLogs ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+              </button>
+              {showErrorLogs && (
+                <div className="mt-2 rounded-md border border-border bg-black/80 p-2.5 font-mono text-[10px] leading-relaxed text-zinc-300 max-h-40 overflow-y-auto space-y-0.5 select-text">
+                  {logs.map((log, i) => (
+                    <div key={i} className="break-all whitespace-pre-wrap">
+                      <span className="text-destructive mr-1">&gt;</span>
+                      {log}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="pt-2 border-t border-border">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={reset}
+            >
+              Escolher outro arquivo
+            </Button>
+          </div>
         </Card>
       )}
     </div>

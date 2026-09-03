@@ -7,9 +7,12 @@
 
 ## 1. Visão Geral
 
-No FileTools, todo motor de conversão é encapsulado como uma **caixa preta isolada** que implementa a interface estrita `IModule`. Esse contrato desacopla a interface do usuário (UI) e o orquestrador (`WorkerManager`) do mecanismo interno de processamento (seja WebAssembly, Web Worker dedicado ou biblioteca JS em runtime).
+No FileTools, todo motor de conversão é encapsulado como uma **caixa preta isolada** que implementa a interface estrita `IModule`. Esse contrato desacopla a interface do usuário (UI) e o orquestrador (`WorkerManager`) do mecanismo interno de processamento (seja WebAssembly multi-thread, WebCodecs acelerado por GPU, ou bibliotecas JS em runtime).
 
-Esta abstração é a pedra fundamental que permite ao FileTools evoluir de um conversor simples de arquivo único para um **sistema de nós e grafos interconectados** (Nodes/Graph System).
+Esta abstração permite ao FileTools suportar:
+1. **Sondagem Dinâmica de Hardware (`isSupported`):** O sistema apenas oferece ao usuário os motores que o hardware e o navegador do cliente comprovadamente suportam (ex: chips de codificação por hardware da GPU via `VideoEncoder.isConfigSupported`, ou suporte a `SharedArrayBuffer` para multi-threading).
+2. **Ranqueamento por Performance (`speedScore`):** Múltiplos motores concorrentes para a mesma conversão são ordenados do mais rápido ao mais lento.
+3. **Decisão Explícita do Usuário (Sem Fallbacks Silenciosos):** Se um motor falhar durante a execução, o erro é reportado explicitamente com o nome do motor, permitindo ao usuário decidir se deseja alternar para outro motor compatível.
 
 ---
 
@@ -17,82 +20,52 @@ Esta abstração é a pedra fundamental que permite ao FileTools evoluir de um c
 
 A definição central reside em `src/shared/types/module.ts`.
 
-### 2.1. Tipos de Dados Suportados (`DataType`)
-
-Os nós e portas aceitam os seguintes tipos primitivos e estruturados:
+### 2.1. Tipos de Aceleração e Pontuação de Performance
 
 ```typescript
-export type DataType = 'file_handle' | 'string' | 'number' | 'boolean' | 'enum';
-```
+export type AccelerationType = 'gpu' | 'cpu-multithread' | 'cpu-singlethread' | 'instant-copy';
 
-- `file_handle`: Referência a arquivo no Origin Private File System (`FileSystemFileHandle`) ou dados binários intermediários em memória (`Uint8Array`).
-- `string`: Texto simples, caminhos, nomes de arquivos, formatos de saída.
-- `number`: Taxas de amostragem, bitrate, resolução, fator de qualidade (CRF, compressão).
-- `boolean`: Flags de conversão (ex: preservar metadados, lossless).
-- `enum`: Opções discretas (ex: presets de encoding, perfis de cor).
-
-### 2.2. Definição de Portas (`PortDefinition`)
-
-Descreve as entradas (`inputs`) e saídas (`outputs`) do módulo:
-
-```typescript
-export interface PortDefinition {
-  id: string;
-  name: string;
-  type: DataType;
-  required: boolean;
-  accepts?: string[]; // MIME types (ex: 'video/*') ou extensões (ex: '.mp4')
-  options?: string[]; // Opções para tipo 'enum'
-  defaultValue?: unknown;
-}
-```
-
-### 2.3. Regras de Conversão (`ConversionRule`)
-
-Usadas para compilação estática de rotas SEO (SSG no Astro) e descoberta dinâmica de formatos na UI:
-
-```typescript
 export interface ConversionRule {
-  from: string[]; // Tipos de origem: MIME wildcards (ex: 'video/*') ou extensões (ex: '.docx')
-  to: string[];   // Extensões de destino (ex: ['.mp4', '.gif', '.mp3'])
+  from: string[]; // Tipos de origem (ex: ['.mp4', '.m4v'] ou wildcards 'audio/*')
+  to: string[];   // Extensões de destino (ex: ['.webm', '.gif'])
   lossy?: boolean;
+  
+  /**
+   * Pontuação de velocidade específica desta regra (1 a 100).
+   * - 95-100: Aceleração direta por hardware (GPU/NVENC) ou cópia direta de stream (Remux).
+   * - 70-85: Processamento multi-threaded em CPU (todos os núcleos via pthreads).
+   * - 30-50: Processamento single-threaded em CPU.
+   */
+  speedScore?: number;
+  
+  /** Tier de aceleração utilizado */
+  acceleration?: AccelerationType;
+  
+  /** Descrição técnica curta exibida na UI */
+  performanceNotes?: string;
 }
 ```
 
-### 2.4. Manifesto do Módulo (`ModuleManifest`)
-
-Metadados estáticos do módulo:
+### 2.2. Sondagem de Capacidades do Hardware (`CapabilityCheckContext`)
 
 ```typescript
-export interface ModuleManifest {
-  id: string;
-  name: string;
-  version: string;
-  description: string;
-  category: 'video' | 'audio' | 'document' | 'image';
-  supportedConversions: ConversionRule[];
-  inputs: PortDefinition[];
-  outputs: PortDefinition[];
+export interface CapabilityCheckContext {
+  sourceExt?: string;
+  targetFormat?: string;
+  mimeType?: string;
 }
 ```
 
-### 2.5. Contexto de Execução (`ExecutionContext`)
-
-Canal de comunicação fornecido pelo orquestrador durante a conversão:
-
-```typescript
-export interface ExecutionContext {
-  onProgress: (percent: number, message?: string) => void;
-  onLog: (message: string) => void;
-  workspacePath: string; // Caminho isolado no OPFS: /sessions/{sessionId}/{taskId}/
-}
-```
-
-### 2.6. A Interface `IModule`
+### 2.3. A Interface `IModule`
 
 ```typescript
 export interface IModule {
   manifest: ModuleManifest;
+  /**
+   * Sondagem assíncrona de compatibilidade de hardware/browser.
+   * Se retornar false, o motor não será exibido nem sugerido para o usuário.
+   */
+  isSupported?: (context?: CapabilityCheckContext) => Promise<boolean> | boolean;
   execute: (
     inputs: Record<string, unknown>,
     context: ExecutionContext
@@ -102,30 +75,29 @@ export interface IModule {
 
 ---
 
-## 3. Ciclo de Vida de Execução de um Módulo
+## 3. Resolução e Filtro de Motores Compatíveis
 
-O ciclo de vida padrão de uma execução segue 6 fases bem delimitadas:
+Quando o usuário seleciona um formato de origem e de destino (ex: `MP4 → WebM`), o sistema invoca:
 
+```typescript
+resolveAvailableEngines(sourceExt: string, targetExt: string, mimeType?: string): Promise<EngineOption[]>
 ```
-[1. Resolução] ──> [2. Alocação OPFS] ──> [3. Despacho] ──> [4. Processamento] ──> [5. Cleanup MEMFS] ──> [6. Retorno]
-```
 
-1. **Resolução de Formato:** A UI/Orquestrador chama `resolvePossibleConversions(ext, mimeType)` no `src/modules/registry.ts` para identificar o módulo responsável.
-2. **Alocação de Workspace OPFS:** O `WorkerManager` cria a pasta de isolamento da tarefa `/sessions/{sessionId}/{taskId}/` via `OPFSManager.createWorkspace`.
-3. **Despacho da Tarefa:**
-   - **Módulos Convencionais (ex: Mammoth, SheetJS, pdf-lib, Magick):** Executados no Web Worker isolado (`src/core/workers/conversionWorker.ts`) via proxy Comlink.
-   - **Módulos com Workers Internos (ex: `@ffmpeg/ffmpeg`):** Despachados na main thread pelo `WorkerManager.executeOnMainThread` para evitar o antipattern de *worker-inside-worker* no navegador.
-4. **Processamento e Telemetria:** O módulo recebe os dados binários (`fileData: Uint8Array`) ou manipuladores OPFS, reporta progresso de 0 a 100% via `context.onProgress` e logs de diagnóstico via `context.onLog`.
-5. **Limpeza de Memória Temporária (MEMFS/Cache):** O módulo deve obrigatoriamente deletar arquivos temporários montados em seu sistema de arquivos virtual (ex: `ffmpeg.deleteFile`) antes de finalizar.
-6. **Retorno e Liberação:** Retorna `outputData` (`Uint8Array`), `outputFileName` e `mimeType`. O `WorkerManager` no bloco `finally` chama `OPFSManager.cleanupWorkspace` para garantir zero acúmulo de lixo em disco.
+1. **Casamento de Regras:** O `ModuleRegistry` verifica quais regras declaram suporte a `from → to`.
+2. **Sondagem de Hardware em Tempo Real:** Para cada motor compatível, invoca `await module.isSupported(...)`:
+   - Para `webcodecs-gpu`: Verifica se `VideoEncoder.isConfigSupported` confirma suporte acelerado por hardware para o codec destino (ex: VP9 ou H.264). Se a GPU do usuário não possuir o chip codificador, o motor é descartado silenciosamente.
+   - Para `ffmpeg-core-mt`: Verifica se o navegador possui `SharedArrayBuffer` e isolamento COOP/COEP (`crossOriginIsolated`). Se não possuir, o motor multi-thread é descartado.
+3. **Ordenação por Performance:** Os motores aprovados no teste de hardware são ordenados decrescentemente pelo `speedScore`.
+4. **Recomendação Padrão:** O primeiro motor da lista recebe `isRecommended = true`.
 
 ---
 
-## 4. Diretrizes para Novos Módulos
+## 4. Política de Tratamento de Erros (Zero Fallback Oculto)
 
-Ao implementar um novo módulo para o FileTools:
-1. Deve ser implementado em `src/modules/{nome}.ts`.
-2. Deve exportar um objeto estático que cumpra rigorosamente `IModule`.
-3. Deve ser registrado em `src/modules/registry.ts` dentro do mapa `ModuleRegistry`.
-4. Não deve conter estilos nem referências à árvore de renderização do React.
-5. Deve gerenciar internamente o ciclo de vida de suas instâncias Wasm (padrão Singleton com inicialização lazy).
+Conforme a diretriz de transparência técnica do FileTools:
+1. O orquestrador `WorkerManager` executa estritamente o motor selecionado pelo usuário.
+2. Em caso de falha de execução:
+   - O erro é lançado contendo a mensagem técnica real.
+   - A interface (`ConvertPanel.tsx`) indica claramente:
+     `"Falha na conversão com o motor {Nome do Motor}"`
+   - O sistema lista diretamente no cartão de erro os outros motores compatíveis disponíveis (ex: `[🚀 Usar FFmpeg Multi-Thread]`, `[💻 Usar FFmpeg WASM]`), conferindo total controle de decisão ao usuário.

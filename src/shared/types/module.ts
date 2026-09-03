@@ -1,16 +1,16 @@
-/**
+﻿/**
  * src/shared/types/module.ts
  *
  * Core type contracts for the FileTools module system.
  * These types define the "IModule" interface that every conversion engine must implement.
  * They are designed to support the future Nodes/Graph system.
  *
- * ⚠️  DO NOT MODIFY without updating all module implementations.
- *
- * Source of truth: docs/ARCHITECTURE.MD § 3.1
+ * Source of truth: docs/protocols/module-contract.md
  */
 
 export type DataType = 'file_handle' | 'string' | 'number' | 'boolean' | 'enum';
+
+export type AccelerationType = 'gpu' | 'cpu-multithread' | 'cpu-singlethread' | 'instant-copy';
 
 export interface PortDefinition {
   id: string;
@@ -30,6 +30,12 @@ export interface ConversionRule {
   /** Output extensions (e.g. ['.mp4', '.mp3']) */
   to: string[];
   lossy?: boolean;
+  /** Speed / performance score from 1 (slowest) to 100 (instant) for this specific conversion rule */
+  speedScore?: number;
+  /** Acceleration tier */
+  acceleration?: AccelerationType;
+  /** Brief description of performance and trade-offs */
+  performanceNotes?: string;
 }
 
 export interface ModuleManifest {
@@ -51,8 +57,20 @@ export interface ExecutionContext {
   workspacePath: string;
 }
 
+export interface CapabilityCheckContext {
+  sourceExt?: string;
+  targetFormat?: string;
+  mimeType?: string;
+}
+
 export interface IModule {
   manifest: ModuleManifest;
+  /**
+   * Optional capability probe.
+   * Allows the engine to inspect client hardware, GPU codecs,
+   * SharedArrayBuffer, etc., before declaring compatibility to the user.
+   */
+  isSupported?: (context?: CapabilityCheckContext) => Promise<boolean> | boolean;
   execute: (
     inputs: Record<string, unknown>,
     context: ExecutionContext,

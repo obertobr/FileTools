@@ -1,15 +1,14 @@
 ﻿/**
  * src/modules/ffmpeg.ts
  *
- * FFmpeg WASM conversion engine.
- * Uses @ffmpeg/ffmpeg 0.12 which internally spawns its own Web Worker.
- * File data is passed as Uint8Array to avoid structured clone issues.
+ * FFmpeg WASM conversion engine (Single-Thread).
+ * Uses @ffmpeg/ffmpeg 0.12 with standard @ffmpeg/core.
+ * High compatibility fallback engine running on single CPU thread.
  */
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL } from '@ffmpeg/util';
 import type { IModule, ExecutionContext } from '@/shared/types/module';
 
-/** Singleton FFmpeg instance - load once, reuse across conversions */
 let ffmpegInstance: FFmpeg | null = null;
 let ffmpegLoaded = false;
 
@@ -84,13 +83,27 @@ function getMimeType(ext: string): string {
 export const FFmpegModule: IModule = {
   manifest: {
     id: 'ffmpeg-core',
-    name: 'FFmpeg WASM',
+    name: 'FFmpeg WASM (Single-Thread)',
     version: '0.12.15',
-    description: 'Conversao de audio e video de alta performance offline.',
+    description: 'Conversão confiável em CPU single-thread com alta compatibilidade.',
     category: 'video',
     supportedConversions: [
-      { from: ['video/*'], to: ['.mp4', '.mkv', '.webm', '.gif'], lossy: true },
-      { from: ['audio/*'], to: ['.mp3', '.wav', '.ogg', '.m4a', '.flac'], lossy: true },
+      {
+        from: ['video/*'],
+        to: ['.mp4', '.mkv', '.webm', '.gif'],
+        lossy: true,
+        speedScore: 45,
+        acceleration: 'cpu-singlethread',
+        performanceNotes: 'CPU single-thread padrão (seguro para baixa memória)',
+      },
+      {
+        from: ['audio/*'],
+        to: ['.mp3', '.wav', '.ogg', '.m4a', '.flac'],
+        lossy: true,
+        speedScore: 50,
+        acceleration: 'cpu-singlethread',
+        performanceNotes: 'CPU single-thread para áudio',
+      },
     ],
     inputs: [
       { id: 'file', name: 'Input File', type: 'file_handle', required: true },
