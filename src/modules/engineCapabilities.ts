@@ -34,6 +34,10 @@ export const MODIFIER_LABELS: Record<ModifierCategoryId, string> = {
   audio_tracks: 'Faixas de Áudio',
   subtitles: 'Legendas',
   threads: 'Desempenho / CPU',
+  pixel_format: 'Formato de Pixel',
+  bit_depth: 'Profundidade de Cor',
+  bitrate: 'Taxa de Bits (Bitrate)',
+  color_space: 'Espaço de Cor',
 };
 
 /**

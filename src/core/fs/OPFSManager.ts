@@ -109,6 +109,22 @@ export class OPFSManager {
   }
 
   /**
+   * Writes a ReadableStream directly into the specified workspace via pipeTo.
+   * Zero heap memory accumulation.
+   */
+  static async writeWorkspaceStream(
+    workspace: FileSystemDirectoryHandle,
+    filename: string,
+    stream: ReadableStream<Uint8Array>
+  ): Promise<FileSystemFileHandle> {
+    const fileHandle = await workspace.getFileHandle(filename, { create: true });
+    // @ts-ignore - createWritable is standard in OPFS
+    const writable = await fileHandle.createWritable();
+    await stream.pipeTo(writable);
+    return fileHandle;
+  }
+
+  /**
    * Reads a file from the workspace back into a File object.
    */
   static async readWorkspaceFile(
@@ -119,3 +135,4 @@ export class OPFSManager {
     return await fileHandle.getFile();
   }
 }
+

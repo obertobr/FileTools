@@ -1,8 +1,15 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Typography } from '@/ui/components/core';
 import { cn } from '@/lib/utils';
+import { AlertTriangle } from 'lucide-react';
 import type { ConversionModifiers, ResolutionScale } from '@/shared/types/conversionModifiers';
 import type { MediaProbeResult } from '@/core/media/mediaProbe';
+import {
+  RESOLUTION_PRESETS,
+  DEFAULT_VIDEO_RESOLUTIONS,
+  findMatchingResolutionPreset,
+  type ResolutionPresetData,
+} from '@/core/knowledge/resolutionPresets';
 
 export interface ResolutionCardProps {
   options: ConversionModifiers;
@@ -11,138 +18,90 @@ export interface ResolutionCardProps {
   probedMedia?: MediaProbeResult;
   targetFormat?: string;
   videoCodec?: string;
+  allowedOptions?: (string | number)[];
+  warningMessage?: string;
 }
 
 export function ResolutionCard({
   options,
   onChange,
-  isGif,
   probedMedia,
-  targetFormat,
-  videoCodec,
+  allowedOptions,
+  warningMessage,
 }: ResolutionCardProps) {
-  const currentTarget = (targetFormat || '').toLowerCase().replace(/^\.+/, '');
-  const activeCodec = videoCodec || options.videoCodec || 'auto';
-  const is3GPH263 = (currentTarget === '3gp' && (activeCodec === 'h263' || activeCodec === 'auto')) || activeCodec === 'h263';
+  // 1. Determine active allowed options from props or default knowledge base
+  const activeAllowed = allowedOptions && allowedOptions.length > 0
+    ? allowedOptions.map(String)
+    : DEFAULT_VIDEO_RESOLUTIONS;
 
-  const isCustomScale = Boolean(options.isCustomResolution) && !is3GPH263;
+  const isCustomAllowed = activeAllowed.includes('custom');
+  const isCustomScale = Boolean(options.isCustomResolution) && isCustomAllowed;
   const isProportional = options.isCustomResolutionProportional !== false;
 
   const nativeWidth = probedMedia?.width || options.probedMedia?.width;
   const nativeHeight = probedMedia?.height || options.probedMedia?.height;
   const nativeDimensionStr = nativeWidth && nativeHeight ? `${nativeWidth}x${nativeHeight}` : '';
 
-  // Determine if native dimensions directly match a standard preset
-  let matchingNativePresetId: ResolutionScale | null = null;
-  if (nativeWidth && nativeHeight) {
-    if (nativeWidth === 1920 || nativeHeight === 1080) matchingNativePresetId = '1080p';
-    else if (nativeWidth === 1280 || nativeHeight === 720) matchingNativePresetId = '720p';
-    else if (nativeWidth === 854 || nativeHeight === 480) matchingNativePresetId = '480p';
-    else if ((nativeWidth === 480 && nativeHeight === 320) || nativeWidth === 320) matchingNativePresetId = '320p';
-    else if (nativeWidth === 352 && nativeHeight === 288) matchingNativePresetId = 'cif';
-    else if (nativeWidth === 176 && nativeHeight === 144) matchingNativePresetId = 'qcif';
-    else if (nativeWidth === 128 && nativeHeight === 96) matchingNativePresetId = 'sub-qcif';
-  }
+  // 2. Identify if native dimension matches a known preset in the knowledge base
+  const matchingNativePreset = findMatchingResolutionPreset(nativeWidth, nativeHeight);
+  const matchingNativePresetId: ResolutionScale | null = matchingNativePreset?.id ?? null;
 
-  // Base presets
-  let presets: { id: ResolutionScale; label: string; desc: string; width: number; height?: number; isNative?: boolean }[] = [];
+  // 3. Build UI preset buttons directly by mapping allowedOptions against RESOLUTION_PRESETS
+  const presetKeys = activeAllowed.filter((key) => key !== 'custom' && RESOLUTION_PRESETS[key]);
 
-  if (is3GPH263) {
-    presets = [
-      {
-        id: 'cif',
-        label: matchingNativePresetId === 'cif' ? 'CIF (Nativo)' : 'CIF',
-        desc: matchingNativePresetId === 'cif' ? 'Nativo (352x288)' : 'Padrão (352x288)',
-        width: 352,
-        height: 288,
-        isNative: matchingNativePresetId === 'cif',
-      },
-      {
-        id: 'qcif',
-        label: matchingNativePresetId === 'qcif' ? 'QCIF (Nativo)' : 'QCIF',
-        desc: matchingNativePresetId === 'qcif' ? 'Nativo (176x144)' : 'Clássico (176x144)',
-        width: 176,
-        height: 144,
-        isNative: matchingNativePresetId === 'qcif',
-      },
-      {
-        id: 'sub-qcif',
-        label: matchingNativePresetId === 'sub-qcif' ? 'sub-QCIF (Nativo)' : 'sub-QCIF',
-        desc: matchingNativePresetId === 'sub-qcif' ? 'Nativo (128x96)' : 'Ultra-leve (128x96)',
-        width: 128,
-        height: 96,
-        isNative: matchingNativePresetId === 'sub-qcif',
-      },
-    ];
-  } else if (isGif) {
-    presets = [
-      { id: '320p', label: '320p', desc: 'Leve (320px)', width: 320, height: -1 },
-      { id: '480p', label: '480p', desc: 'Padrão (480px)', width: 480, height: -1 },
-      { id: '720p', label: '720p', desc: 'HD (720px)', width: 720, height: -1 },
-    ];
-    if (!matchingNativePresetId || !['320p', '480p', '720p'].includes(matchingNativePresetId)) {
-      presets.push({
-        id: 'original',
-        label: nativeDimensionStr ? `Original (${nativeDimensionStr})` : 'Original',
-        desc: '100% nativo',
-        width: 0,
-        isNative: true,
-      });
-    }
-  } else {
-    // Video presets: 1080p, 720p, 480p, 320p
-    const standardPresets: { id: ResolutionScale; label: string; desc: string; width: number; height?: number }[] = [
-      { id: '1080p', label: '1080p', desc: 'Full HD (1920px)', width: 1920, height: -2 },
-      { id: '720p', label: '720p', desc: 'HD (1280px)', width: 1280, height: -2 },
-      { id: '480p', label: '480p', desc: 'SD (854px)', width: 854, height: -2 },
-      { id: '320p', label: '320p', desc: 'Baixa (480px)', width: 480, height: -2 },
-    ];
+  const presets = presetKeys.map((key) => {
+    const data: ResolutionPresetData = RESOLUTION_PRESETS[key];
+    const isNative = matchingNativePresetId === data.id;
+    let label = data.label;
+    let desc = data.desc;
 
-    // If native doesn't match standard 1080p/720p/480p/320p (e.g. 4K, 1440p, square, etc.), show Original first
-    if (!matchingNativePresetId) {
-      presets.push({
-        id: 'original',
-        label: nativeDimensionStr ? `Original (${nativeDimensionStr})` : 'Original',
-        desc: '100% nativo do arquivo',
-        width: 0,
-        isNative: true,
-      });
+    if (key === 'original' && nativeDimensionStr) {
+      label = `Original (${nativeDimensionStr})`;
+      desc = '100% nativo do arquivo';
+    } else if (isNative) {
+      label = `${data.label} (Nativo)`;
+      desc = nativeDimensionStr ? `Nativo (${nativeDimensionStr})` : 'Nativo do arquivo';
     }
 
-    // Add standard presets, annotating the native one if matched
-    for (const p of standardPresets) {
-      const isNative = matchingNativePresetId === p.id;
-      presets.push({
-        ...p,
-        label: isNative ? `${p.label} (Nativo)` : p.label,
-        desc: isNative ? (nativeDimensionStr ? `Nativo (${nativeDimensionStr})` : 'Nativo do arquivo') : p.desc,
-        isNative,
-      });
-    }
-  }
+    return {
+      ...data,
+      label,
+      desc,
+      isNative,
+    };
+  });
 
-  // Auto-sync: if native dimensions match a standard preset and user hasn't explicitly chosen custom or another preset, sync to that preset
-  React.useEffect(() => {
+  // 4. Auto-sync if native matches a preset and user hasn't customized
+  useEffect(() => {
     if (matchingNativePresetId && options.resolutionScale === 'original' && !options.isCustomResolution) {
       const match = presets.find((p) => p.id === matchingNativePresetId);
       if (match && match.width > 0) {
         onChange({
           resolutionScale: matchingNativePresetId,
           targetWidth: match.width,
-          targetHeight: match.height !== undefined ? match.height : -2,
+          targetHeight: match.height,
         });
       }
     }
   }, [matchingNativePresetId]);
 
   // Selected preset resolution scale:
-  // If resolutionScale is 'original' and native matches 1080p, 1080p is selected!
+  const firstPresetId = presets[0]?.id || 'original';
   const effectiveSelectedId = (options.resolutionScale === 'original' && matchingNativePresetId)
     ? matchingNativePresetId
-    : (options.resolutionScale || (matchingNativePresetId || (is3GPH263 ? 'qcif' : 'original')));
+    : (options.resolutionScale || (matchingNativePresetId || firstPresetId));
 
   return (
     <div className="space-y-2 pt-0.5">
+      {/* Aviso preventivo enviado pelo Motor de Regras */}
+      {warningMessage && (
+        <div className="flex items-start gap-2 p-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px]">
+          <AlertTriangle className="size-3.5 shrink-0 mt-0.5 text-amber-400" />
+          <span>{warningMessage}</span>
+        </div>
+      )}
+
+      {/* Rótulo de dimensões ativas */}
       <div className="flex items-center justify-between">
         <Typography variant="caption" color="muted">
           Dimensões e escala de renderização:
@@ -158,7 +117,8 @@ export function ResolutionCard({
         </span>
       </div>
 
-      <div className={cn('grid gap-1.5', is3GPH263 ? 'grid-cols-3' : (isGif ? 'grid-cols-4' : 'grid-cols-5'))}>
+      {/* Grid Dinâmico de Presets — puramente baseado em presets do Dicionário */}
+      <div className={cn('grid gap-1.5', presets.length <= 3 ? 'grid-cols-3' : (presets.length <= 4 ? 'grid-cols-4' : 'grid-cols-5'))}>
         {presets.map((preset) => {
           const isSelected = !isCustomScale && effectiveSelectedId === preset.id;
           return (
@@ -189,11 +149,11 @@ export function ResolutionCard({
           );
         })}
 
-        {!is3GPH263 && (
+        {isCustomAllowed && (
           <button
             type="button"
             onClick={() => {
-              const defaultW = options.customScaleWidth || (isGif ? 480 : (nativeWidth || 1280));
+              const defaultW = options.customScaleWidth || (nativeWidth || 1280);
               const defaultH = options.customScaleHeight || (nativeHeight || 720);
               onChange({
                 resolutionScale: 'custom',
@@ -219,12 +179,7 @@ export function ResolutionCard({
         )}
       </div>
 
-      {is3GPH263 && (
-        <div className="rounded-md border border-primary/20 bg-primary/5 p-2 text-[11px] text-muted-foreground">
-          💡 <strong className="text-foreground">Sintonia de Codec:</strong> O codec legado <strong>H.263</strong> aceita estritamente resoluções padronizadas CIF, QCIF e sub-QCIF. Para resoluções HD (720p/1080p) ou customizadas, selecione o codec <strong>MPEG-4</strong> no modificador de Codec de Vídeo.
-        </div>
-      )}
-
+      {/* Painel de Escala Customizada */}
       {isCustomScale && (
         <div className="space-y-2 pt-1 border-t border-border/40">
           <label className="flex items-center gap-2 cursor-pointer select-none text-[11px] text-foreground">
@@ -232,69 +187,64 @@ export function ResolutionCard({
               type="checkbox"
               checked={isProportional}
               onChange={(e) => {
-                const prop = e.target.checked;
-                const w = options.customScaleWidth || (isGif ? 480 : (nativeWidth || 1280));
-                const h = prop ? -2 : (options.customScaleHeight || (nativeHeight || 720));
+                const nextProportional = e.target.checked;
+                const w = options.customScaleWidth || 1280;
+                const h = options.customScaleHeight || 720;
                 onChange({
-                  isCustomResolutionProportional: prop,
-                  customScaleWidth: w,
-                  customScaleHeight: prop ? undefined : (h > 0 ? h : 720),
+                  isCustomResolutionProportional: nextProportional,
                   targetWidth: w,
-                  targetHeight: h,
-                  isCustomResolution: true,
-                  resolutionScale: 'custom',
+                  targetHeight: nextProportional ? -2 : h,
+                  customScaleWidth: w,
+                  customScaleHeight: nextProportional ? undefined : h,
+                  gifScaleWidth: w,
                 });
               }}
-              className="rounded border-border text-primary focus:ring-primary size-3.5"
+              className="rounded border-border text-primary focus:ring-0 size-3.5"
             />
             <span>Manter proporção (altura calculada automaticamente)</span>
           </label>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-muted-foreground">Largura:</span>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-muted-foreground shrink-0">Largura:</span>
               <input
                 type="number"
-                min="100"
-                max="3840"
-                value={options.customScaleWidth || (isGif ? 480 : (nativeWidth || 1280))}
+                min="16"
+                max="7680"
+                step="2"
+                value={options.customScaleWidth || 1280}
                 onChange={(e) => {
-                  const val = Math.max(100, Math.min(3840, parseInt(e.target.value, 10) || 100));
-                  const h = isProportional ? -2 : (options.customScaleHeight || (nativeHeight || 720));
+                  const val = Math.max(16, parseInt(e.target.value, 10) || 1280);
                   onChange({
-                    targetWidth: val,
-                    targetHeight: h,
                     customScaleWidth: val,
+                    targetWidth: val,
                     gifScaleWidth: val,
-                    isCustomResolution: true,
-                    resolutionScale: 'custom',
                   });
                 }}
-                className="w-20 rounded border border-primary bg-surface-raised px-2 py-0.5 text-xs text-foreground focus:outline-none"
+                className="w-full rounded border border-primary bg-surface-raised px-2 py-1 text-xs text-foreground focus:outline-none"
               />
-              <span className="text-[11px] text-muted-foreground font-mono">px</span>
+              <span className="text-[11px] text-muted-foreground">px</span>
             </div>
 
             {!isProportional && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-muted-foreground">Altura:</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-muted-foreground shrink-0">Altura:</span>
                 <input
                   type="number"
-                  min="100"
-                  max="2160"
-                  value={options.customScaleHeight || (nativeHeight || 720)}
+                  min="16"
+                  max="4320"
+                  step="2"
+                  value={options.customScaleHeight || 720}
                   onChange={(e) => {
-                    const val = Math.max(100, Math.min(2160, parseInt(e.target.value, 10) || 100));
+                    const val = Math.max(16, parseInt(e.target.value, 10) || 720);
                     onChange({
-                      targetHeight: val,
                       customScaleHeight: val,
-                      isCustomResolution: true,
-                      resolutionScale: 'custom',
+                      targetHeight: val,
                     });
                   }}
-                  className="w-20 rounded border border-primary bg-surface-raised px-2 py-0.5 text-xs text-foreground focus:outline-none"
+                  className="w-full rounded border border-primary bg-surface-raised px-2 py-1 text-xs text-foreground focus:outline-none"
                 />
-                <span className="text-[11px] text-muted-foreground font-mono">px</span>
+                <span className="text-[11px] text-muted-foreground">px</span>
               </div>
             )}
           </div>

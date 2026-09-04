@@ -14,9 +14,9 @@ No FileTools, todo motor de conversão é um **módulo isolado** que implementa 
 
 | # | Arquivo | Ação |
 |---|---|---|
-| 1 | `src/modules/<nome-do-modulo>.ts` | **CRIAR** — Implementar `IModule` |
+| 1 | `src/modules/engines/<nome-do-modulo>.ts` | **CRIAR** — Implementar `IModule` |
 | 2 | `src/modules/registry.ts` | **MODIFICAR** — Importar e registrar o módulo |
-| 3 | `src/lib/formats.ts` | **MODIFICAR** — Adicionar entradas em `CONVERTERS` (se houver novos pares from→to) |
+| 3 | `src/lib/formats.ts` | **VERIFICAR** — Confirmar se extensões estão em `FORMAT_CATALOG` |
 | 4 | `src/core/engine/WorkerManager.ts` | **MODIFICAR** — Adicionar à lista `MAIN_THREAD_MODULES` (se aplicável) |
 | 5 | `src/modules/registry.test.ts` | **MODIFICAR** — Adicionar testes de resolução do novo módulo |
 | 6 | `e2e/modules/<nome>.spec.ts` | **CRIAR** — Teste E2E de conversão real (Playwright) |
@@ -25,14 +25,14 @@ No FileTools, todo motor de conversão é um **módulo isolado** que implementa 
 
 ## Passo 1: Criar o Arquivo do Módulo
 
-Crie o arquivo em `src/modules/<nome-do-modulo>.ts`.
+Crie o arquivo em `src/modules/engines/<nome-do-modulo>.ts`.
 
 ### 1.1. Estrutura Obrigatória
 
 Todo módulo **deve** exportar uma constante do tipo `IModule` com:
 
 ```typescript
-// src/modules/meu-modulo.ts
+// src/modules/engines/meu-modulo.ts
 
 import type { IModule, ExecutionContext } from '@/shared/types/module';
 
@@ -244,7 +244,7 @@ Edite [`src/modules/registry.ts`](../../src/modules/registry.ts):
 
 ```typescript
 // 1. Adicionar import no topo (em ordem alfabética com os existentes)
-import { MeuModule } from './meu-modulo';
+import { MeuModule } from './engines/meu-modulo';
 
 // 2. Adicionar entrada no objeto ModuleRegistry
 //    A CHAVE deve ser EXATAMENTE o manifest.id do módulo
@@ -296,11 +296,11 @@ Se o módulo **NÃO** gerencia workers próprios e pode rodar em um Web Worker g
 
 ---
 
-## Passo 4: Adicionar Conversões ao Catálogo
+## Passo 4: Habilitação de Conversões no Catálogo
 
-Se o novo módulo suporta **novos pares from→to** que ainda não existem em `CONVERTERS`, adicione-os em [`src/lib/formats.ts`](../../src/lib/formats.ts).
+No FileTools, não há lista estática manual de conversões. Os pares válidos são derivados automaticamente pelo gerador dinâmico (`generateConverters()`) a partir de `supportedConversions` declarado no manifesto do motor e dos formatos registrados em `FORMAT_CATALOG`.
 
-Consulte o guia dedicado: [`docs/guides/adding-a-format.md`](./adding-a-format.md).
+Se o novo motor introduzir novos formatos ainda não catalogados, adicione suas extensões em [`src/lib/formats.ts`](../../src/lib/formats.ts). Consulte [`docs/guides/adding-a-format.md`](./adding-a-format.md) para detalhes.
 
 ---
 
@@ -355,10 +355,10 @@ Antes de considerar o módulo completo, verificar **todos** os itens:
 
 | Módulo | Arquivo | Complexidade | Destaque |
 |---|---|---|---|
-| Remux (Stream Copy) | [`src/modules/remux.ts`](../../src/modules/remux.ts) | Simples | Conversão mais básica possível (cópia de stream) |
-| FFmpeg WASM | [`src/modules/ffmpeg.ts`](../../src/modules/ffmpeg.ts) | Média | Single-thread, sem opções avançadas |
-| FFmpeg Multi-Thread | [`src/modules/ffmpeg-mt.ts`](../../src/modules/ffmpeg-mt.ts) | Complexa | Multi-thread, thread optimizer, Pilha de Modificadores completo, probing de streams |
-| ImageMagick WASM | [`src/modules/magick.ts`](../../src/modules/magick.ts) | Placeholder | Esqueleto mínimo (execute ainda não implementado) |
+| Remux (Stream Copy) | [`src/modules/engines/remux.ts`](../../src/modules/engines/remux.ts) | Simples | Conversão mais básica possível (cópia de stream) |
+| FFmpeg WASM | [`src/modules/engines/ffmpeg.ts`](../../src/modules/engines/ffmpeg.ts) | Média | Single-thread, sem opções avançadas |
+| FFmpeg Multi-Thread | [`src/modules/engines/ffmpeg-mt.ts`](../../src/modules/engines/ffmpeg-mt.ts) | Complexa | Multi-thread, thread optimizer, Pilha de Modificadores completo, probing de streams |
+| ImageMagick WASM | [`src/modules/engines/magick.ts`](../../src/modules/engines/magick.ts) | Placeholder | Esqueleto mínimo (execute ainda não implementado) |
 
 ---
 

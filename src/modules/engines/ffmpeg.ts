@@ -5,10 +5,17 @@
  * Universal media processor without SharedArrayBuffer / COOP/COEP requirements.
  */
 import { FFmpeg } from '@ffmpeg/ffmpeg';
+import type { FFFSType } from '@ffmpeg/ffmpeg';
 import { toBlobURL } from '@ffmpeg/util';
-import type { IModule, ExecutionContext } from '../shared/types/module';
-import type { ConversionModifiers } from '../shared/types/conversionModifiers';
-import { categoryOfExtension } from '../lib/formats';
+import type { IModule, ExecutionContext } from '@/shared/types/module';
+import type { ConversionModifiers } from '@/shared/types/conversionModifiers';
+import { categoryOfExtension } from '@/lib/formats';
+import { resolveVideoCodecEncoder } from '@/core/knowledge/videoCodecs';
+import { getAudioCodecFlags } from '@/core/knowledge/audioCodecs';
+import { resolveColorSpaceArgs, resolvePixelFormatAndBitDepth } from '@/core/knowledge/colorPresets';
+import { resolveQualityCrf } from '@/core/knowledge/qualityPresets';
+import { getMimeType } from '@/core/knowledge/mimeTypes';
+
 
 let ffmpegInstance: FFmpeg | null = null;
 let ffmpegLoaded = false;
@@ -134,18 +141,9 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
   }
 
   // Quality CRF tuning
-  const crfMap: Record<string, string> = {
-    original: '18',
-    balanced: '23',
-    compressed: '28',
-  };
-  const crfVal = options?.targetCrf !== undefined
-    ? String(options.targetCrf)
-    : (options?.customCrf !== undefined
-      ? String(options.customCrf)
-      : (crfMap[options?.qualityPreset || 'original'] || '18'));
+  const crfVal = String(resolveQualityCrf(options));
 
-  const { pixFmt, profileArgs, isCustom: hasCustomPixFmt } = getPixelFormatAndBitDepth(options);
+  const { pixFmt, profileArgs, isCustom: hasCustomPixFmt } = resolvePixelFormatAndBitDepth(options);
 
   const getLibx264Args = () => [
     '-preset', 'fast',
@@ -171,7 +169,7 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
     : undefined;
 
   // Color space handling
-  const colorSpaceArgs = getColorSpaceArgs(options);
+  const colorSpaceArgs = resolveColorSpaceArgs(options);
 
   // Video resolution scale filter: decoupled from preset labels by receiving canonical targetWidth and targetHeight
   let videoScaleFilter: string[] = [];
@@ -204,7 +202,7 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
   // Image to Video with custom duration
   if (isImageToVideo) {
     const duration = options?.videoDurationSeconds || 10;
-    const vCodec = userVideoCodec === 'vp8' ? 'libvpx' : (userVideoCodec === 'vp9' ? 'libvpx-vp9' : (userVideoCodec === 'hevc' ? 'libx265' : 'libx264'));
+    const vCodec = resolveVideoCodecEncoder(userVideoCodec, 'libx264');
     const scaleFilter = videoScaleFilter.length > 0 ? videoScaleFilter : ['-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2'];
     return [
       '-c:v', vCodec,
@@ -216,45 +214,10 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
     ];
   }
 
-  // Audio encoder helper
-  function getAudioCodecFlags(codec: string, audioExt: string, streamIdx?: number): string[] {
-    const s = streamIdx !== undefined ? `:${streamIdx}` : '';
-    const bArgs = effectiveAudioBitrate ? [`-b:a${s}`, effectiveAudioBitrate] : [];
-
-    if (codec && codec !== 'auto') {
-      if (codec === 'copy') return [`-c:a${s}`, 'copy'];
-      if (codec === 'mp3') return [`-c:a${s}`, 'libmp3lame', `-qscale:a${s}`, '2', ...bArgs];
-      if (codec === 'aac') return [`-c:a${s}`, 'aac', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '192k'])];
-      if (codec === 'vorbis') return [`-c:a${s}`, 'libvorbis', `-qscale:a${s}`, '5', ...bArgs];
-      if (codec === 'opus') return [`-c:a${s}`, 'libopus', `-ar${s}`, '48000', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '128k'])];
-      if (codec === 'flac') return [`-c:a${s}`, 'flac'];
-      if (codec === 'pcm') return [`-c:a${s}`, 'pcm_s16le'];
-      if (codec === 'ac3') return [`-c:a${s}`, 'ac3', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '192k'])];
-    }
-
-    if (audioExt === '.mp3') return [`-c:a${s}`, 'libmp3lame', `-qscale:a${s}`, '2', ...bArgs];
-    if (audioExt === '.wav') return [`-c:a${s}`, 'pcm_s16le'];
-    if (audioExt === '.ogg') return [`-c:a${s}`, 'libvorbis', `-qscale:a${s}`, '5', ...bArgs];
-    if (audioExt === '.flac') return [`-c:a${s}`, 'flac'];
-    if (audioExt === '.m4a' || audioExt === '.aac') return [`-c:a${s}`, 'aac', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '192k'])];
-    if (audioExt === '.opus') return [`-c:a${s}`, 'libopus', `-ar${s}`, '48000', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '128k'])];
-    if (audioExt === '.wma') return [`-c:a${s}`, 'wmav2', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '128k'])];
-    if (audioExt === '.aiff' || audioExt === '.aif') return [`-c:a${s}`, 'pcm_s16be'];
-    if (audioExt === '.ac3') return [`-c:a${s}`, 'ac3', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '192k'])];
-    if (audioExt === '.m4r') return [`-c:a${s}`, 'aac', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '192k']), '-f', 'ipod'];
-
-    // Default container audio codec fallbacks
-    if (audioExt === '.webm' || audioExt === '.ogv') return [`-c:a${s}`, 'libvorbis', ...bArgs];
-    if (audioExt === '.avi') return [`-c:a${s}`, 'libmp3lame', ...bArgs];
-    if (audioExt === '.wmv') return [`-c:a${s}`, 'wmav2', ...bArgs];
-    if (audioExt === '.mpg' || audioExt === '.mpeg' || audioExt === '.vob') return [`-c:a${s}`, 'mp2', ...bArgs];
-    return [`-c:a${s}`, 'aac', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '192k'])];
-  }
-
   // Audio to Video with black screen
   if (isAudioToVideo) {
-    const vCodec = userVideoCodec === 'vp8' ? 'libvpx' : (userVideoCodec === 'vp9' ? 'libvpx-vp9' : (userVideoCodec === 'hevc' ? 'libx265' : 'libx264'));
-    const audioFlags = getAudioCodecFlags(userAudioCodec || 'auto', to);
+    const vCodec = resolveVideoCodecEncoder(userVideoCodec, 'libx264');
+    const audioFlags = getAudioCodecFlags(userAudioCodec || 'auto', to, undefined, effectiveAudioBitrate);
     return [
       '-filter_complex', 'color=c=black:s=1280x720:r=30[v]',
       '-map', '[v]',
@@ -271,6 +234,7 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
       ...audioFlags,
     ];
   }
+
 
   // 1. GIF Output
   if (to === '.gif') {
@@ -338,10 +302,10 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
   if (isPerTrackCodec) {
     audioCodecArgs = selectedAudioTracks.flatMap((trackIdx, outputStreamIdx) => {
       const trackCodec = options.trackAudioCodecs?.[trackIdx] || userAudioCodec || 'auto';
-      return getAudioCodecFlags(trackCodec, to, outputStreamIdx);
+      return getAudioCodecFlags(trackCodec, to, outputStreamIdx, effectiveAudioBitrate);
     });
   } else {
-    audioCodecArgs = getAudioCodecFlags(userAudioCodec || 'auto', to);
+    audioCodecArgs = getAudioCodecFlags(userAudioCodec || 'auto', to, undefined, effectiveAudioBitrate);
   }
 
   const videoAudioFlags = isMute
@@ -350,8 +314,8 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
 
   // 4. Video to WebM
   if (to === '.webm') {
-    const vCodec = 'libvpx';
-    if (userVideoCodec === 'copy') return ['-c:v', 'copy', ...videoAudioFlags];
+    const vCodec = resolveVideoCodecEncoder(userVideoCodec, 'libvpx');
+    if (vCodec === 'copy') return ['-c:v', 'copy', ...videoAudioFlags];
     return [
       '-c:v', vCodec,
       ...(effectiveVideoBitrate ? videoBitrateArgs : ['-b:v', '1.5M']),
@@ -375,11 +339,7 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
     if (!hasModifications) {
       return ['-c', 'copy'];
     }
-    let vCodec = 'libx264';
-    if (userVideoCodec === 'hevc') vCodec = 'libx265';
-    if (userVideoCodec === 'vp8') vCodec = 'libvpx';
-    if (userVideoCodec === 'vp9') vCodec = 'libvpx-vp9';
-    if (userVideoCodec === 'copy') vCodec = 'copy';
+    const vCodec = resolveVideoCodecEncoder(userVideoCodec, 'libx264');
     return [
       '-c:v', vCodec,
       ...(vCodec === 'libx264' ? getLibx264Args() : generalPixFmtArgs),
@@ -392,9 +352,7 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
 
   // 6. Video to AVI
   if (to === '.avi') {
-    let vCodec = 'mpeg4';
-    if (userVideoCodec === 'h264') vCodec = 'libx264';
-    if (userVideoCodec === 'copy') vCodec = 'copy';
+    const vCodec = resolveVideoCodecEncoder(userVideoCodec, 'mpeg4');
     return [
       '-c:v', vCodec,
       ...(vCodec === 'libx264' ? getLibx264Args() : generalPixFmtArgs),
@@ -408,9 +366,7 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
 
   // 7. Video to MOV
   if (to === '.mov') {
-    let vCodec = 'libx264';
-    if (userVideoCodec === 'hevc') vCodec = 'libx265';
-    if (userVideoCodec === 'copy') vCodec = 'copy';
+    const vCodec = resolveVideoCodecEncoder(userVideoCodec, 'libx264');
     return [
       '-c:v', vCodec,
       ...(vCodec === 'libx264' ? getLibx264Args() : generalPixFmtArgs),
@@ -425,9 +381,7 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
 
   // 8. Video to FLV
   if (to === '.flv') {
-    let vCodec = 'flv';
-    if (userVideoCodec === 'h264') vCodec = 'libx264';
-    if (userVideoCodec === 'copy') vCodec = 'copy';
+    const vCodec = resolveVideoCodecEncoder(userVideoCodec, 'flv');
     return [
       '-c:v', vCodec,
       ...(vCodec === 'libx264' ? getLibx264Args() : generalPixFmtArgs),
@@ -456,11 +410,11 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
     const isCustomScale = videoScaleFilter.length > 0;
     let vCodec = 'h263';
     if (userVideoCodec && userVideoCodec !== 'auto') {
-      // Prioritize preserving user's explicit codec choice
-      vCodec = userVideoCodec === 'mpeg4' ? 'mpeg4' : (userVideoCodec === 'h264' ? 'libx264' : 'h263');
+      vCodec = resolveVideoCodecEncoder(userVideoCodec, 'h263');
     } else if (isCustomScale) {
-      // Automatic fallback to mpeg4 only when user hasn't explicitly chosen h263
-      vCodec = 'mpeg4';
+      vCodec = resolveVideoCodecEncoder(userVideoCodec, 'mpeg4');
+    } else {
+      vCodec = resolveVideoCodecEncoder(userVideoCodec, 'h263');
     }
     const scale = isCustomScale ? videoScaleFilter : ['-s', '176x144'];
     const fps = videoFpsArgs.length > 0 ? videoFpsArgs : ['-r', '15'];
@@ -477,9 +431,10 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
 
   // 11. Video to TS
   if (to === '.ts') {
+    const vCodec = resolveVideoCodecEncoder(userVideoCodec, 'libx264');
     return [
-      '-c:v', userVideoCodec === 'hevc' ? 'libx265' : 'libx264',
-      ...(userVideoCodec === 'hevc' ? ['-preset', 'fast'] : getLibx264Args()),
+      '-c:v', vCodec,
+      ...(vCodec === 'libx265' ? ['-preset', 'fast'] : getLibx264Args()),
       '-f', 'mpegts',
       ...videoBitrateArgs,
       ...colorSpaceArgs,
@@ -515,10 +470,7 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
   }
 
   // 14. Video to MP4 / M4V (Default)
-  let vCodec = 'libx264';
-  if (userVideoCodec === 'hevc') vCodec = 'libx265';
-  if (userVideoCodec === 'mpeg4') vCodec = 'mpeg4';
-  if (userVideoCodec === 'copy') vCodec = 'copy';
+  const vCodec = resolveVideoCodecEncoder(userVideoCodec, 'libx264');
 
   return [
     '-c:v', vCodec,
@@ -532,103 +484,6 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
   ];
 }
 
-function getPixelFormatAndBitDepth(options?: ConversionModifiers): {
-  pixFmt: string;
-  profileArgs: string[];
-  isCustom: boolean;
-} {
-  const isPixFmtActive = options?.activeCategories?.includes('pixel_format');
-  const isBitDepthActive = options?.activeCategories?.includes('bit_depth');
-
-  const rawPixFmt = isPixFmtActive && options?.pixelFormat && options.pixelFormat !== 'auto'
-    ? options.pixelFormat
-    : 'yuv420p';
-  const rawBitDepth = isBitDepthActive && options?.bitDepth && options.bitDepth !== 'auto'
-    ? options.bitDepth
-    : '8bit';
-
-  let chosenFmt = rawPixFmt;
-  if (rawBitDepth === '10bit') {
-    if (chosenFmt === 'yuv420p') chosenFmt = 'yuv420p10le';
-    else if (chosenFmt === 'yuv422p') chosenFmt = 'yuv422p10le';
-    else if (chosenFmt === 'yuv444p') chosenFmt = 'yuv444p10le';
-    else if (chosenFmt === 'gray') chosenFmt = 'gray10le';
-  } else if (rawBitDepth === '12bit') {
-    if (chosenFmt === 'yuv420p') chosenFmt = 'yuv420p12le';
-    else if (chosenFmt === 'yuv422p') chosenFmt = 'yuv422p12le';
-    else if (chosenFmt === 'yuv444p') chosenFmt = 'yuv444p12le';
-    else if (chosenFmt === 'gray') chosenFmt = 'gray12le';
-  }
-
-  const profileArgs: string[] = [];
-  if (rawBitDepth === '10bit') {
-    profileArgs.push('-profile:v', 'high10');
-  }
-
-  const isCustom = Boolean(
-    (isPixFmtActive && options?.pixelFormat && options.pixelFormat !== 'auto') ||
-    (isBitDepthActive && options?.bitDepth && options.bitDepth !== 'auto')
-  );
-
-  return {
-    pixFmt: chosenFmt,
-    profileArgs,
-    isCustom,
-  };
-}
-
-function getColorSpaceArgs(options?: ConversionModifiers): string[] {
-  if (!options?.activeCategories?.includes('color_space') || !options.colorSpace || options.colorSpace === 'auto') {
-    return [];
-  }
-  switch (options.colorSpace) {
-    case 'bt709':
-      return ['-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709'];
-    case 'bt2020':
-      return ['-colorspace', 'bt2020nc', '-color_primaries', 'bt2020', '-color_trc', 'arib-std-b67'];
-    case 'smpte170m':
-      return ['-colorspace', 'smpte170m', '-color_primaries', 'smpte170m', '-color_trc', 'smpte170m'];
-    case 'bt470bg':
-      return ['-colorspace', 'bt470bg', '-color_primaries', 'bt470bg', '-color_trc', 'bt470bg'];
-    case 'srgb':
-      return ['-colorspace', 'iec61966-2-1', '-color_primaries', 'bt709', '-color_trc', 'iec61966-2-1'];
-    default:
-      return [];
-  }
-}
-
-function getMimeType(ext: string): string {
-  const map: Record<string, string> = {
-    '.mp4': 'video/mp4',
-    '.mkv': 'video/x-matroska',
-    '.webm': 'video/webm',
-    '.mov': 'video/quicktime',
-    '.avi': 'video/x-msvideo',
-    '.flv': 'video/x-flv',
-    '.wmv': 'video/x-ms-wmv',
-    '.3gp': 'video/3gpp',
-    '.ts': 'video/mp2t',
-    '.mpg': 'video/mpeg',
-    '.mpeg': 'video/mpeg',
-    '.vob': 'video/dvd',
-    '.m4v': 'video/x-m4v',
-    '.ogv': 'video/ogg',
-    '.gif': 'image/gif',
-    '.mp3': 'audio/mpeg',
-    '.wav': 'audio/wav',
-    '.ogg': 'audio/ogg',
-    '.flac': 'audio/flac',
-    '.m4a': 'audio/mp4',
-    '.aac': 'audio/aac',
-    '.opus': 'audio/opus',
-    '.wma': 'audio/x-ms-wma',
-    '.aiff': 'audio/aiff',
-    '.aif': 'audio/aiff',
-    '.ac3': 'audio/ac3',
-    '.m4r': 'audio/x-m4r',
-  };
-  return map[ext] || 'application/octet-stream';
-}
 
 export const FFmpegModule: IModule = {
   manifest: {
@@ -715,13 +570,14 @@ export const FFmpegModule: IModule = {
     totalDuration = 0;
     currentSpeed = '';
 
-    const fileData = inputs.fileData as Uint8Array;
+    const file = inputs.file as File | Blob | undefined;
+    const fileData = inputs.fileData as Uint8Array | undefined;
     const originalName = inputs.originalName as string;
     const targetFormat = inputs.targetFormat as string;
     const options = (inputs.modifiers as ConversionModifiers) || (inputs.options as ConversionModifiers) || undefined;
 
-    if (!fileData || !originalName || !targetFormat) {
-      throw new Error('FFmpeg module requires fileData (Uint8Array), originalName, and targetFormat.');
+    if ((!file && !fileData) || !originalName || !targetFormat) {
+      throw new Error('FFmpeg module requires file (File/Blob) or fileData (Uint8Array), originalName, and targetFormat.');
     }
 
     const inputExt = '.' + originalName.split('.').pop()!.toLowerCase();
@@ -731,12 +587,51 @@ export const FFmpegModule: IModule = {
     context.onLog(`[FFmpeg] Converting ${originalName} -> ${outputFileName}`);
 
     const ffmpeg = await getFFmpeg(context);
-    const inputPath = `input${inputExt}`;
+    let mountedWorkDir = false;
+    const workDir = '/work';
+    const fallbackInputPath = `input${inputExt}`;
+    let inputPath = fallbackInputPath;
     const outputPath = `output${outputExt}`;
 
     try {
-      context.onProgress(0, 'Carregando arquivo...');
-      await ffmpeg.writeFile(inputPath, fileData);
+      const targetFileOrBlob: File | Blob | null = file || (fileData ? new Blob([fileData as unknown as BlobPart]) : null);
+
+      if (typeof ffmpeg.mount === 'function' && targetFileOrBlob) {
+        try {
+          try {
+            await ffmpeg.createDir(workDir);
+          } catch (_e) {
+            /* noop if already exists */
+          }
+
+          if (typeof File !== 'undefined' && targetFileOrBlob instanceof File) {
+            await ffmpeg.mount('WORKERFS' as FFFSType, {
+              files: [targetFileOrBlob],
+            }, workDir);
+            inputPath = `${workDir}/${targetFileOrBlob.name}`;
+            mountedWorkDir = true;
+          } else {
+            const blobName = `input${inputExt}`;
+            await ffmpeg.mount('WORKERFS' as FFFSType, {
+              blobs: [{ name: blobName, data: targetFileOrBlob }],
+            }, workDir);
+            inputPath = `${workDir}/${blobName}`;
+            mountedWorkDir = true;
+          }
+
+          context.onLog(`[FFmpeg] WORKERFS montado com sucesso em ${workDir} (Zero-RAM streaming).`);
+        } catch (mountErr) {
+          context.onLog(`[FFmpeg] WORKERFS indisponível (${mountErr}), utilizando gravação direta.`);
+          mountedWorkDir = false;
+        }
+      }
+
+      if (!mountedWorkDir) {
+        inputPath = fallbackInputPath;
+        context.onProgress(0, 'Carregando arquivo...');
+        const dataToWrite: Uint8Array = fileData || new Uint8Array(await (file as File | Blob).arrayBuffer());
+        await ffmpeg.writeFile(inputPath, dataToWrite);
+      }
 
       const isImageToVideo = categoryOfExtension(inputExt) === 'image' && (categoryOfExtension(outputExt) === 'video' || outputExt === '.gif');
       const inputExtraFlags = isImageToVideo ? ['-loop', '1'] : [];
@@ -762,17 +657,34 @@ export const FFmpegModule: IModule = {
       context.onProgress(100, 'Conversão concluída!');
       context.onLog(`[FFmpeg] Sucesso: ${outputFileName} (${outputData.byteLength} bytes)`);
 
+      const mimeType = getMimeType(outputExt);
+      const outputBlob = new Blob([outputData.buffer as unknown as BlobPart], { type: mimeType });
+
       return {
         outputData: outputData,
+        outputBlob: outputBlob,
         outputFileName: outputFileName,
         outputSize: outputData.byteLength,
-        mimeType: getMimeType(outputExt),
+        mimeType: mimeType,
       };
     } finally {
-      try {
-        await ffmpeg.deleteFile(inputPath);
-      } catch (_e) {
-        /* noop */
+      if (mountedWorkDir) {
+        try {
+          await ffmpeg.unmount(workDir);
+        } catch (_e) {
+          /* noop */
+        }
+        try {
+          await ffmpeg.deleteDir(workDir);
+        } catch (_e) {
+          /* noop */
+        }
+      } else {
+        try {
+          await ffmpeg.deleteFile(inputPath);
+        } catch (_e) {
+          /* noop */
+        }
       }
       try {
         await ffmpeg.deleteFile(outputPath);
@@ -783,3 +695,4 @@ export const FFmpegModule: IModule = {
     }
   },
 };
+

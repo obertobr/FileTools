@@ -1,34 +1,54 @@
 import React from 'react';
 import { Typography } from '@/ui/components/core';
 import { cn } from '@/lib/utils';
+import { AlertTriangle } from 'lucide-react';
 import type { ConversionModifiers, PixelFormatChoice } from '@/shared/types/conversionModifiers';
+import {
+  PIXEL_FORMAT_PRESETS,
+  DEFAULT_PIXEL_FORMATS,
+  type PixelFormatPresetData,
+} from '@/core/knowledge/colorPresets';
 
 export interface PixelFormatCardProps {
   options: ConversionModifiers;
   onChange: (updated: Partial<ConversionModifiers>) => void;
+  allowedOptions?: (string | number)[];
+  warningMessage?: string;
 }
 
-export function PixelFormatCard({ options, onChange }: PixelFormatCardProps) {
+export function PixelFormatCard({
+  options,
+  onChange,
+  allowedOptions,
+  warningMessage,
+}: PixelFormatCardProps) {
   const currentFormat = options.pixelFormat || 'auto';
 
-  const presets: { id: PixelFormatChoice; label: string; desc: string }[] = [
-    { id: 'auto', label: 'Automático', desc: 'Padrão recomendado' },
-    { id: 'yuv420p', label: 'YUV 4:2:0 (8-bit)', desc: 'Universal (Web / Celular / TV)' },
-    { id: 'yuv422p', label: 'YUV 4:2:2', desc: 'Alta fidelidade de croma' },
-    { id: 'yuv444p', label: 'YUV 4:4:4', desc: 'Sem subamostragem cromática' },
-    { id: 'yuv420p10le', label: 'YUV 4:2:0 (10-bit)', desc: 'HDR e gradientes suaves' },
-    { id: 'rgb24', label: 'RGB 24-bit', desc: 'RGB puro sem matriz YUV' },
-    { id: 'gray', label: 'Escala de Cinza', desc: 'Preto e branco ultra-leve' },
-  ];
+  const activeAllowed: PixelFormatChoice[] = allowedOptions && allowedOptions.length > 0
+    ? (allowedOptions.map(String) as PixelFormatChoice[])
+    : DEFAULT_PIXEL_FORMATS;
+
+  const presets: PixelFormatPresetData[] = activeAllowed
+    .filter((id) => PIXEL_FORMAT_PRESETS[id])
+    .map((id) => PIXEL_FORMAT_PRESETS[id]);
+
+  const currentLabel = PIXEL_FORMAT_PRESETS[currentFormat]?.label || 'Automático';
 
   return (
     <div className="space-y-2 pt-0.5">
+      {warningMessage && (
+        <div className="flex items-center gap-2 p-2 rounded bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs">
+          <AlertTriangle className="size-4 shrink-0" />
+          <span>{warningMessage}</span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <Typography variant="caption" color="muted">
           Formato de pixel e amostragem de cores:
         </Typography>
         <span className="text-[11px] font-mono text-primary font-medium">
-          {presets.find((p) => p.id === currentFormat)?.label || 'Automático'}
+          {currentLabel}
         </span>
       </div>
 

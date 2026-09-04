@@ -1,20 +1,14 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
+import { DURATION_PRESETS, type DurationPresetData } from '@/core/knowledge/durationPresets';
 
 export interface DurationCardProps {
   durationSeconds: number;
   isCustom: boolean;
   onChange: (duration: number, isCustom: boolean) => void;
+  allowedOptions?: (string | number)[];
+  warningMessage?: string;
 }
-
-const PRESETS = [
-  { value: 3, label: '3s', desc: 'Rápido' },
-  { value: 5, label: '5s', desc: 'Curto' },
-  { value: 10, label: '10s', desc: 'Padrão' },
-  { value: 15, label: '15s', desc: 'Story/Reels' },
-  { value: 30, label: '30s', desc: 'Médio' },
-  { value: 60, label: '60s', desc: '1 minuto' },
-];
 
 export function DurationCard({
   durationSeconds,
@@ -28,7 +22,7 @@ export function DurationCard({
       </span>
 
       <div className="grid grid-cols-3 sm:grid-cols-7 gap-1.5">
-        {PRESETS.map((preset) => {
+        {DURATION_PRESETS.map((preset) => {
           const isSelected = !isCustom && durationSeconds === preset.value;
           return (
             <button

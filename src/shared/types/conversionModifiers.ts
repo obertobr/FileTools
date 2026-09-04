@@ -5,7 +5,9 @@
  * Zero mock data: real probed streams, unified modular stack.
  */
 
+import type { ElementType } from 'react';
 import type { MediaProbeResult } from '@/core/media/mediaProbe';
+import { categoryOfExtension, type Category } from '@/lib/formats';
 
 export type ModifierCategoryId =
   | 'fps'
@@ -55,8 +57,15 @@ export type PixelFormatChoice =
   | 'yuv422p'
   | 'yuv444p'
   | 'yuv420p10le'
+  | 'yuv422p10le'
+  | 'yuv444p10le'
+  | 'yuv420p12le'
+  | 'yuv422p12le'
+  | 'yuv444p12le'
   | 'rgb24'
-  | 'gray';
+  | 'gray'
+  | 'gray10le'
+  | 'gray12le';
 
 export type BitDepthChoice =
   | 'auto'
@@ -164,3 +173,64 @@ export const DEFAULT_CONVERSION_MODIFIERS: ConversionModifiers = {
   gifFps: 12,
   gifScaleWidth: 480,
 };
+
+export interface ModifierContext {
+  sourceExt: string;
+  targetExt: string;
+  sourceCategory: Category;
+  targetCategory: Category;
+  currentValues: ConversionModifiers;
+  activeModifiers: ModifierCategoryId[];
+  sourceProbe?: MediaProbeResult;
+}
+
+export interface ImplicitRuleResult {
+  isImplicit: boolean;
+  lockedValue?: any;
+  reason?: string;
+}
+
+export interface DerivedOptionsResult {
+  allowedOptions?: (string | number)[];
+  warningMessage?: string;
+}
+
+export interface ModifierDefinition {
+  id: ModifierCategoryId;
+  title: string;
+  description: string;
+  icon: ElementType;
+  pinned?: boolean | ((ctx: ModifierContext) => boolean);
+
+  // 1. Aplicabilidade Base: Faz sentido mostrar isso para essa conversão?
+  isApplicable: (ctx: ModifierContext) => boolean;
+
+  // 2. Exclusão Mútua: Quais modificadores NÃO podem coexistir com este?
+  mutuallyExclusiveWith?: ModifierCategoryId[];
+
+  // 3. Trava Implícita (Force On): Deve ser ativado obrigatoriamente e travado?
+  implicitRule?: (ctx: ModifierContext) => ImplicitRuleResult;
+
+  // 4. Derivação de Opções (Synergy): O modificador adapta suas opções
+  // com base no que os outros modificadores estão fazendo.
+  deriveOptions?: (ctx: ModifierContext) => DerivedOptionsResult;
+}
+
+export function createModifierContext(
+  targetFormat: string,
+  sourceExt: string,
+  currentValues: ConversionModifiers,
+  sourceProbe?: MediaProbeResult
+): ModifierContext {
+  const cleanTarget = (targetFormat || '').toLowerCase().replace(/^\.+/, '');
+  const cleanSource = (sourceExt || '').toLowerCase().replace(/^\.+/, '');
+  return {
+    sourceExt: cleanSource,
+    targetExt: cleanTarget,
+    sourceCategory: categoryOfExtension(cleanSource),
+    targetCategory: categoryOfExtension(cleanTarget),
+    currentValues,
+    activeModifiers: currentValues?.activeCategories || [],
+    sourceProbe,
+  };
+}

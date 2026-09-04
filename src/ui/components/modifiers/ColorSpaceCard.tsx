@@ -1,33 +1,54 @@
 import React from 'react';
 import { Typography } from '@/ui/components/core';
 import { cn } from '@/lib/utils';
+import { AlertTriangle } from 'lucide-react';
 import type { ConversionModifiers, ColorSpaceChoice } from '@/shared/types/conversionModifiers';
+import {
+  COLOR_SPACE_PRESETS,
+  DEFAULT_COLOR_SPACES,
+  type ColorSpacePresetData,
+} from '@/core/knowledge/colorPresets';
 
 export interface ColorSpaceCardProps {
   options: ConversionModifiers;
   onChange: (updated: Partial<ConversionModifiers>) => void;
+  allowedOptions?: (string | number)[];
+  warningMessage?: string;
 }
 
-export function ColorSpaceCard({ options, onChange }: ColorSpaceCardProps) {
+export function ColorSpaceCard({
+  options,
+  onChange,
+  allowedOptions,
+  warningMessage,
+}: ColorSpaceCardProps) {
   const currentSpace = options.colorSpace || 'auto';
 
-  const presets: { id: ColorSpaceChoice; label: string; desc: string }[] = [
-    { id: 'auto', label: 'Automático', desc: 'Preserva espaço original' },
-    { id: 'bt709', label: 'Rec. 709 (HD / Web)', desc: 'Padrão universal HDTV e internet SDR' },
-    { id: 'bt2020', label: 'Rec. 2020 (4K / HDR)', desc: 'Ampla gama de cores (Wide Color Gamut)' },
-    { id: 'smpte170m', label: 'Rec. 601 (NTSC)', desc: 'Definição padrão analógica NTSC' },
-    { id: 'bt470bg', label: 'Rec. 601 (PAL)', desc: 'Definição padrão PAL / 625 linhas' },
-    { id: 'srgb', label: 'sRGB', desc: 'Monitores de PC e gráficos' },
-  ];
+  const activeAllowed: ColorSpaceChoice[] = allowedOptions && allowedOptions.length > 0
+    ? (allowedOptions.map(String) as ColorSpaceChoice[])
+    : DEFAULT_COLOR_SPACES;
+
+  const presets: ColorSpacePresetData[] = activeAllowed
+    .filter((id) => COLOR_SPACE_PRESETS[id])
+    .map((id) => COLOR_SPACE_PRESETS[id]);
+
+  const currentLabel = COLOR_SPACE_PRESETS[currentSpace]?.label || 'Automático';
 
   return (
     <div className="space-y-2 pt-0.5">
+      {warningMessage && (
+        <div className="flex items-center gap-2 p-2 rounded bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs">
+          <AlertTriangle className="size-4 shrink-0" />
+          <span>{warningMessage}</span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <Typography variant="caption" color="muted">
           Espaço de cor, primárias e matriz:
         </Typography>
         <span className="text-[11px] font-mono text-primary font-medium">
-          {presets.find((p) => p.id === currentSpace)?.label || 'Automático'}
+          {currentLabel}
         </span>
       </div>
 

@@ -56,6 +56,32 @@ Para garantir consistência visual estrita, manutenibilidade e escalabilidade do
   - `Input.tsx`: Campos de busca e entrada de texto com `focus-ring` e bordas padronizadas.
 * **Estética Visual:** Dark mode nativo com superfícies quase pretas (`oklch`), bordas finas (*hairline*), acento verde esmeralda contido e tipografia nítida (Inter + JetBrains Mono).
 
+### 5.1. Dumb UI e Separação de Conhecimento de Domínio (Data-Driven Architecture)
+Para impedir vazamentos de regras de negócio (*domain knowledge*) para dentro dos componentes visuais:
+
+1. **Componentes React Estritamente Burros (Dumb UI):**
+   - Componentes visuais (`.tsx`) em `src/ui/` **NUNCA** devem conter lógica condicional baseada em nomes de codecs, resoluções específicas ou extensões de formato (ex: proibido `if (codec === 'h263')`, `if (ext === 'gif')` ou `if (nativeWidth === 1920)`).
+   - Componentes visuais não tomam decisões de compatibilidade, não filtram codecs por container internamente e não constroem presets ad-hoc na camada de renderização.
+
+2. **Dicionários Estáticos na Base de Conhecimento (`src/core/knowledge/`):**
+   - Todas as constantes de domínio, metadados visuais (rótulos, descrições), resoluções, taxas de quadros, codecs suportados e limites residem exclusivamente na pasta `src/core/knowledge/` (ex: `resolutionPresets.ts`, `fpsPresets.ts`, `codecConstraints.ts`, `videoCodecs.ts`, `audioCodecs.ts`, `colorPresets.ts`, `bitratePresets.ts`, `qualityPresets.ts`, `durationPresets.ts`).
+   - Esses arquivos são contratos estáticos puros, desacoplados de qualquer camada de renderização ou estado de interface.
+
+3. **Motor de Regras como Único Tomador de Decisão (`ModifierDefinitions.ts`):**
+   - A inteligência sobre aplicabilidade, visibilidade, travamento e restrições de opções pertence **exclusivamente** ao catálogo do Rules Engine em `ModifierDefinitions.ts` através das funções:
+     - `isApplicable(ctx)`: determina se o modificador pode existir para o fluxo de conversão atual.
+     - `pinned(ctx)`: fixa cards obrigatórios ou essenciais para a conversão.
+     - `implicitRule(ctx)`: impõe regras compulsórias (ex: mixagem obrigatória de áudio multifaixa para contêiner de áudio).
+     - `deriveOptions(ctx)`: consulta a Base de Conhecimento e calcula as opções permitidas (`allowedOptions`) e eventuais alertas normativos (`warningMessage`).
+
+4. **Contrato de Comunicação entre Motor e UI:**
+   - A interface apenas recebe props puras e declarativas:
+     - `options`: estado atual dos modificadores selecionados.
+     - `onChange`: callback para emissão de atualizações parciais.
+     - `allowedOptions`: lista pura de IDs permitidos (`(string | number)[]`) entregue por `deriveOptions`.
+     - `warningMessage`: texto de alerta informativo derivado das regras de domínio.
+   - O componente apenas mapeia os IDs de `allowedOptions` contra o dicionário estático correspondente da Knowledge Base para obter os textos e descrições, mantendo a renderização 100% orientada a dados (*data-driven*).
+
 ---
 
 ## 6. Orquestração e Memória (OPFS)
@@ -102,20 +128,33 @@ A suíte de testes foca em regras de negócio críticas:
 │   │   ├── fs/                      # OPFSManager (Zelador de sessões)
 │   │   ├── hardware/                # Detecção de hardware e otimização de threads
 │   │   │   └── threadOptimizer.ts   # Thread profiles dinâmicos por codec/CPU
+│   │   ├── knowledge/               # Dicionários Estáticos de Domínio (Data-Driven)
+│   │   │   ├── resolutionPresets.ts # Presets de resolução e matching nativo
+│   │   │   ├── fpsPresets.ts        # Presets de taxa de quadros (FPS)
+│   │   │   ├── codecConstraints.ts  # Restrições de contêineres e codecs
+│   │   │   ├── videoCodecs.ts       # Presets e catálogo de codecs de vídeo
+│   │   │   ├── audioCodecs.ts       # Presets, catálogo e normalizador de codecs de áudio
+│   │   │   ├── colorPresets.ts      # Pixel formats, bit depth e color spaces
+│   │   │   ├── bitratePresets.ts    # Presets de bitrate de vídeo e áudio
+│   │   │   ├── qualityPresets.ts    # Presets de qualidade CRF
+│   │   │   └── durationPresets.ts   # Presets de duração para imagem->vídeo
 │   │   ├── media/                   # Probing de containers de mídia
 │   │   │   └── mediaProbe.ts        # Parser zero-dep para MKV/MP4 (EBML/ISO-BMFF)
 │   │   └── workers/                 # Web Workers com Comlink
-│   ├── modules/                     # Motores de conversão (IModule)
+│   ├── modules/                     # Infraestrutura e Registro de Motores
 │   │   ├── registry.ts              # Registro central de módulos
 │   │   ├── registry.test.ts         # Testes de resolução do registry
-│   │   ├── ffmpeg-mt.ts             # Motor FFmpeg Multi-Thread (pthreads)
-│   │   ├── ffmpeg.ts                # Motor FFmpeg Single-Thread
-│   │   ├── remux.ts                 # Motor Stream Copy (Remux instantâneo)
-│   │   ├── webcodecs.ts             # Motor WebCodecs (GPU)
-│   │   ├── magick.ts                # Motor ImageMagick WASM
-│   │   ├── pdf.ts                   # Motor pdf-lib
-│   │   ├── mammoth.ts               # Motor mammoth.js (DOCX)
-│   │   └── sheetjs.ts               # Motor SheetJS (planilhas)
+│   │   ├── engineCapabilities.ts    # Validador de capacidades
+│   │   └── engines/                 # Motores de conversão (IModule) isolados
+│   │       ├── ffmpeg-mt.ts         # Motor FFmpeg Multi-Thread (pthreads)
+│   │       ├── ffmpeg.ts            # Motor FFmpeg Single-Thread
+│   │       ├── remux.ts             # Motor Stream Copy (Remux instantâneo)
+│   │       ├── webcodecs.ts         # Motor WebCodecs (GPU)
+│   │       ├── magick.ts            # Motor ImageMagick WASM
+│   │       ├── pdf.ts               # Motor pdf-lib
+│   │       ├── mammoth.ts           # Motor mammoth.js (DOCX)
+│   │       ├── sheetjs.ts           # Motor SheetJS (planilhas)
+│   │       └── index.ts             # Exportação unificada dos motores
 │   ├── shared/                      # Tipagens e utilitários agnósticos
 │   │   ├── types/
 │   │   │   ├── module.ts            # Contratos TypeScript de IModule
@@ -127,18 +166,27 @@ A suíte de testes foca em regras de negócio críticas:
 │   │   ├── components/              # Componentes de interface
 │   │   │   ├── core/                # Design System Base (Button, Card, Typography, etc.)
 │   │   │   ├── modifiers/             # Cards modulares do Pilha de Modificadores (Modifier Stack)
-│   │   │   │   ├── ModifierDefinitions.ts  # Catálogo de categorias disponíveis
+│   │   │   │   ├── ModifierDefinitions.ts  # Catálogo do Motor de Regras (Rules Engine)
 │   │   │   │   ├── AddModifierPicker.tsx   # Modal de busca/adição de categorias
 │   │   │   │   ├── AudioTracksCard.tsx     # Card: seleção de faixas de áudio
+│   │   │   │   ├── AudioMergeCard.tsx      # Card: mixagem/unificação de faixas de áudio
 │   │   │   │   ├── SubtitlesCard.tsx       # Card: seleção de legendas
 │   │   │   │   ├── FpsCard.tsx             # Card: taxa de quadros
-│   │   │   │   └── ResolutionCard.tsx      # Card: resolução/escala
+│   │   │   │   ├── ResolutionCard.tsx      # Card: resolução/escala
+│   │   │   │   ├── VideoCodecCard.tsx      # Card: seleção de codec de vídeo
+│   │   │   │   ├── AudioCodecCard.tsx      # Card: seleção de codec de áudio
+│   │   │   │   ├── QualityCard.tsx         # Card: qualidade visual e CRF
+│   │   │   │   ├── PixelFormatCard.tsx     # Card: formato de pixel
+│   │   │   │   ├── BitDepthCard.tsx        # Card: profundidade de bits de cor
+│   │   │   │   ├── BitrateCard.tsx         # Card: taxa de bits
+│   │   │   │   ├── ColorSpaceCard.tsx      # Card: espaço de cor
+│   │   │   │   └── DurationCard.tsx        # Card: duração imagem->vídeo
 │   │   │   └── ...                  # Componentes de negócio (ConvertPanel, etc.)
 │   │   └── layouts/                 # Layouts Astro e App Shell
 │   └── pages/                       # Roteamento Astro SSG
 ├── e2e/                             # Testes End-to-End (Playwright)
 │   ├── modules/                     # Testes de conversão por módulo
-│   └── test-modifiers.spec.ts         # Testes do Pilha de Modificadores (Modifier Stack) UI
+│   └── test-new-modifiers-ui.spec.ts # Testes do Pilha de Modificadores (Modifier Stack) UI
 └── tests/                           # Fixtures e helpers de teste
     └── fixtures/                    # Arquivos reais para testes
 ```
@@ -218,6 +266,48 @@ O sistema de opções avançadas (Pilha de Modificadores (Modifier Stack)) obede
    - É terminantemente proibido limitar ou sobrescrever de forma estática o número de threads (`-threads 1`) dentro de um motor se o modificador de threads estiver disponível ou ativo. Se um motor declara suporte a threads, ele deve respeitar estritamente a escolha do usuário ou o dimensionamento dinâmico calculado pelo hardware optimizer.
    - Motores mono-thread (ex: `ffmpeg-core`) e motores sem re-encodificação (ex: `stream-copy` / `remux`) jamais devem declarar `threads` em seu `supportedModifiers`.
    - Discrepâncias entre o que o modificador oferece e o que o motor de execução efetivamente executa violam o princípio de transparência e confiabilidade do FileTools.
+
+### 12.6. Tolerância a Arquivos Gigantes e Streaming Zero-RAM (WORKERFS & OPFS)
+1. **Eliminação de Alocações Monolíticas em RAM**:
+   - É expressamente proibido alocar arquivos de entrada inteiros na memória heap do navegador via `file.arrayBuffer()` ou duplicações em `Uint8Array` no orquestrador de interface (`ConvertPanel.tsx`). O handle nativo `File` ou `Blob` deve ser repassado diretamente para a camada de execução.
+2. **Montagem Virtual de Arquivos no FFmpeg (WORKERFS)**:
+   - Os motores baseados em FFmpeg (`ffmpeg-mt.ts`, `ffmpeg.ts`, `remux.ts`) utilizam a montagem virtual via `WORKERFS` do Emscripten (`ffmpeg.mount('WORKERFS' as FFFSType, { files: [file] }, '/work')`).
+   - O binário C/WASM lê blocos sob demanda diretamente do descritor de arquivo nativo do navegador sem duplicar o arquivo na RAM do WebAssembly.
+   - Em blocos `finally`, o sistema realiza o desmontamento seguro (`ffmpeg.unmount('/work')`) e a limpeza imediata do diretório virtual.
+3. **Chunked Demuxing & Retorno em Blob**:
+   - Motores demuxers/muxers em JavaScript (como `webcodecs.ts`) realizam a leitura fatiada em blocos controlados (ex: fatias de 2MB diretamente via `ReadableStream` / `file.slice`), prevenindo estouro de heap do V8 ao processar arquivos de múltiplos gigabytes.
+   - Os motores entregam a saída final como `outputBlob` ou gravam diretamente no OPFS, preservando a estabilidade da aba do navegador.
+
+---
+
+## 13. Motor de Regras dos Modificadores (Rules Engine)
+
+Para transformar a definição dos modificadores em um verdadeiro **Rules Engine**, todo o contexto da conversão ativa é encapsulado no objeto declarativo `ModifierContext` (`src/shared/types/conversionModifiers.ts`).
+
+### 13.1. Arquitetura do Contexto (`ModifierContext`)
+
+```typescript
+export interface ModifierContext {
+  sourceExt: string;
+  targetExt: string;
+  sourceCategory: 'video' | 'audio' | 'image' | 'document';
+  targetCategory: 'video' | 'audio' | 'image' | 'document';
+  currentValues: ConversionModifiers;
+  activeModifiers: ModifierCategoryId[];
+  sourceProbe?: MediaProbeResult;
+}
+```
+
+### 13.2. Os Quatro Pilares Declarativos da `ModifierDefinition`
+
+1. **Aplicabilidade Semântica (`isApplicable: (ctx) => boolean`)**:
+   Avalia se o modificador tem sentido técnico para o par ativo (ex: `video_duration` aplica-se exclusivamente a imagem convertida para vídeo; `pixel_format` aplica-se a contêineres de vídeo).
+2. **Exclusão Mútua Declarativa (`mutuallyExclusiveWith`)**:
+   Declara incompatibilidades cruzadas diretas entre modificadores. Exemplo: `audio_merge` (mixagem unificada em fluxo único) declara exclusão mútua com `audio_tracks` (roteamento multifaixa discreto). O painel desativa automaticamente a contraparte conflitante.
+3. **Trava e Forçamento Implícito (`implicitRule: (ctx) => ImplicitRuleResult`)**:
+   Ativa e trava modificadores que são tecnicamente obrigatórios para determinados fluxos (ex: extrair áudio de vídeo multifaixa força `audio_merge` com trava de edição e badge informativo na UI: *"Obrigatório ao extrair áudio de vídeos multifaixa"*).
+4. **Derivação de Opções e Sintonia (`deriveOptions: (ctx) => DerivedOptionsResult`)**:
+   Modificadores adaptam suas opções de forma inteligente com base no codec ou formato ativo (ex: o codec `h263` restringe as resoluções de `ResolutionCard` estritamente aos padrões CIF/QCIF/sub-QCIF e emite aviso explicativo amarelo na UI). O card visual apenas renderiza o que o Rules Engine deriva.
 
 
 

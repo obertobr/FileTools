@@ -50,8 +50,8 @@ ConvertPanel.tsx                          -> Estado: ConversionModifiers (conver
 | 2 | `src/ui/components/modifiers/ModifierDefinitions.ts` | **MODIFICAR** — Adicionar definição do modificador (título, ícone, aplicabilidade semântica) |
 | 3 | `src/ui/components/modifiers/MeuModificadorCard.tsx` | **CRIAR** — Componente do card com controles, feedback visual e acessibilidade |
 | 4 | `src/ui/components/ConversionModifiersPanel.tsx` | **MODIFICAR** — Importar card, adicionar à renderização e ao reset ao remover |
-| 5 | `src/modules/<motor>.ts` | **DECLARAR** — Adicionar ID ao `supportedModifiers` nos motores compatíveis (IoC) |
-| 6 | `src/modules/ffmpeg-mt.ts` e `ffmpeg.ts` | **MODIFICAR** — Ler `inputs.modifiers` e injetar flags de linha de comando ou filtros |
+| 5 | `src/modules/engines/<motor>.ts` | **DECLARAR** — Adicionar ID ao `supportedModifiers` nos motores compatíveis (IoC) |
+| 6 | `src/modules/engines/ffmpeg-mt.ts` e `ffmpeg.ts` | **MODIFICAR** — Ler `inputs.modifiers` e injetar flags de linha de comando ou filtros |
 | 7 | `e2e/test-modifiers.spec.ts` | **CRIAR/ATUALIZAR** — Teste E2E cobrindo adição, interação e remoção do modificador |
 
 ---
@@ -114,11 +114,29 @@ Edite [`src/ui/components/modifiers/ModifierDefinitions.ts`](../../src/ui/compon
   id: 'meu_modificador',
   title: 'Meu Modificador',
   description: 'Breve descrição do que este modificador faz.',
-  icon: 'Wrench', // Ícone Lucide
-  pinned: false,  // true se deve vir aberto por padrão; false para ficar no picker
-  isApplicable: (targetExt: string, sourceCategory?: string, targetCategory?: string) => {
-    // Regra semântica baseada em categorias de mídia
-    return targetCategory === 'video';
+  icon: Wrench, // Ícone Lucide
+  pinned: false,  // boolean ou (ctx: ModifierContext) => boolean
+
+  // 1. Aplicabilidade Base: Faz sentido mostrar isso para essa conversão?
+  isApplicable: (ctx: ModifierContext) => ctx.targetCategory === 'video',
+
+  // 2. Exclusão Mútua (Opcional): Quais modificadores não podem coexistir?
+  mutuallyExclusiveWith: ['outro_modificador'],
+
+  // 3. Trava Implícita (Opcional): Força inclusão e bloqueia edição quando necessário
+  implicitRule: (ctx: ModifierContext) => {
+    if (ctx.targetExt === 'mp4') {
+      return { isImplicit: true, lockedValue: 'padrao', reason: 'Obrigatório para contêiner MP4' };
+    }
+    return { isImplicit: false };
+  },
+
+  // 4. Derivação de Opções / Synergy (Opcional): Adapta opções baseado no contexto
+  deriveOptions: (ctx: ModifierContext) => {
+    if (ctx.currentValues.videoCodec === 'h263') {
+      return { allowedOptions: ['cif', 'qcif'], warningMessage: 'Opções limitadas para o codec H.263' };
+    }
+    return {};
   },
 }
 ```
@@ -198,7 +216,7 @@ O orquestrador central (`src/modules/engineCapabilities.ts`) consulta diretament
 return !engine.manifest.supportedModifiers.includes(modifierId);
 ```
 
-Por isso, você **NÃO precisa alterar o `engineCapabilities.ts`**. Para que um motor seja compatível com seu novo modificador, basta incluir o ID no array `supportedModifiers` do módulo correspondente (ex: `src/modules/ffmpeg-mt.ts`):
+Por isso, você **NÃO precisa alterar o `engineCapabilities.ts`**. Para que um motor seja compatível com seu novo modificador, basta incluir o ID no array `supportedModifiers` do módulo correspondente (ex: `src/modules/engines/ffmpeg-mt.ts`):
 
 ```typescript
 manifest: {
@@ -211,13 +229,13 @@ manifest: {
 }
 ```
 
-Se um motor (como o Remux direto `src/modules/remux.ts`) NÃO declarar o seu modificador no array `supportedModifiers`, o orquestrador automaticamente saberá que ele é incompatível, exibirá o alerta em vermelho na UI e desabilitará o botão de conversão incorreta.
+Se um motor (como o Remux direto `src/modules/engines/remux.ts`) NÃO declarar o seu modificador no array `supportedModifiers`, o orquestrador automaticamente saberá que ele é incompatível, exibirá o alerta em vermelho na UI e desabilitará o botão de conversão incorreta.
 
 ---
 
 ## Passo 6: Consumir no Módulo de Execução
 
-Nos módulos de conversão (ex: `src/modules/ffmpeg-mt.ts`, `src/modules/ffmpeg.ts`):
+Nos módulos de conversão (ex: `src/modules/engines/ffmpeg-mt.ts`, `src/modules/engines/ffmpeg.ts`):
 ```typescript
 const modifiers = (inputs.modifiers as ConversionModifiers) || undefined;
 if (modifiers?.meuModificadorValor) {

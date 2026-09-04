@@ -213,16 +213,13 @@ export function ConvertPanel({
     setFailedEngineName('');
     
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const fileData = new Uint8Array(arrayBuffer);
-
       const manager = WorkerManager.getInstance();
       await manager.initialize();
       
       const result = await manager.convert(
         engineToUse.moduleId,
         { 
-          fileData: fileData,
+          file: file,
           targetFormat: '.' + target.replace(/^\.+/, '').toLowerCase(),
           originalName: file.name,
           options: conversionModifiers,
@@ -238,15 +235,24 @@ export function ConvertPanel({
         }
       );
       
-      if (result && result.outputData) {
-        const outputData = result.outputData as Uint8Array;
-        const mimeType = (result.mimeType as string) || 'application/octet-stream';
-        const blob = new Blob([outputData as unknown as BlobPart], { type: mimeType });
+      if (result && (result.outputBlob || result.outputData)) {
+        let blob: Blob;
+        let outputSize: number;
+        if (result.outputBlob instanceof Blob) {
+          blob = result.outputBlob;
+          outputSize = blob.size;
+        } else {
+          const outputData = result.outputData as Uint8Array;
+          const mimeType = (result.mimeType as string) || 'application/octet-stream';
+          blob = new Blob([outputData as unknown as BlobPart], { type: mimeType });
+          outputSize = outputData.byteLength;
+        }
         setOutputUrl(URL.createObjectURL(blob));
-        setOutputSize(outputData.byteLength);
+        setOutputSize(outputSize);
       } else {
         throw new Error('Nenhum dado de saída retornado pelo motor de conversão.');
       }
+
       
       setStatus('done');
       setProgressMessage(undefined);

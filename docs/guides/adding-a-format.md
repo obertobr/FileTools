@@ -73,57 +73,48 @@ export function categoryOfExtension(ext: string): Category {
 
 ---
 
-## Cenário 2: Adicionar um Novo Par de Conversão (from→to)
+## Cenário 2: Adicionar ou Habilitar um Par de Conversão (from→to)
 
-Quando um módulo já suporta a conversão mas ela ainda não está no catálogo.
+No FileTools, **não existe cadastro manual de conversões** (o antigo uso de `conv()` foi descontinuado). O sistema adota geração dinâmica e automática:
 
-### 2.1. Adicionar em `CONVERTERS`
+A função `generateConverters()` em [`src/lib/converters.ts`](../../src/lib/converters.ts) deriva automaticamente todas as rotas SSG (`/converter/[from]-para-[to]`), o catálogo visual e a inferência de pares a partir da combinação entre:
+1. O catálogo de formatos [`FORMAT_CATALOG`](../../src/lib/formats.ts);
+2. As regras declaradas no array `supportedConversions` do manifesto (`ModuleManifest`) de cada motor em [`src/modules/engines/`](../../src/modules/engines/).
 
-```typescript
-export const CONVERTERS: Converter[] = [
-  // ... conversões existentes ...
+### 2.1. Declarar o Suporte no Manifesto do Motor
 
-  // Adicionar na seção do módulo correspondente
-  // A função conv() cria o objeto com slug automático em PT-BR
-  conv('NOVO', 'MP4', 'video', 'Convert NOVO video to MP4'),
-  conv('MP4', 'NOVO', 'video', 'Convert MP4 video to NOVO'),
-];
-```
-
-#### A função `conv(from, to, category, description)`
-
-| Parâmetro | Tipo | Regra |
-|---|---|---|
-| `from` | `string` | MAIÚSCULAS, sem ponto (ex: `'MKV'`) |
-| `to` | `string` | MAIÚSCULAS, sem ponto (ex: `'MP4'`) |
-| `category` | `Category` | Mesma categoria do formato fonte |
-| `description` | `string` | Inglês, formato: `'Convert X to Y'` ou `'Extract X from Y'` |
-
-#### Regras do `CONVERTERS`
-
-| Regra | Detalhe |
-|---|---|
-| **Slug automático** | A função `conv()` gera o slug `{from.lower()}-para-{to.lower()}` (PT-BR: "para" = "to"). |
-| **Agrupamento** | Manter conversões agrupadas por módulo responsável (comentários `// --- FFmpeg ---`, `// --- Magick ---`). |
-| **Sem duplicatas** | Cada par from→to deve aparecer **exatamente uma vez**. Múltiplos motores para o mesmo par são gerenciados pelo engine selector, não por duplicação no catálogo. |
-| **Bidirecionalidade** | Adicionar ambas direções separadamente se o módulo suporta (ex: `MKV→MP4` E `MP4→MKV`). |
-
-### 2.2. Verificar Suporte no Módulo
-
-Confirmar que pelo menos um módulo no registry tem o par no `supportedConversions`:
+Para disponibilizar um par (ex: `NOVO → MP4` ou `MP4 → NOVO`), adicione a regra no manifesto do motor correspondente (ex: `src/modules/engines/ffmpeg-mt.ts`):
 
 ```typescript
-// No módulo correspondente, verificar:
-supportedConversions: [
-  {
-    from: ['.novo'],  // ou 'video/*' se usar wildcard
-    to: ['.mp4'],
-    // ... speedScore, acceleration, etc.
-  },
-],
+// Em src/modules/engines/<motor>.ts
+manifest: {
+  id: 'ffmpeg-core-mt',
+  name: 'FFmpeg Multi-Thread',
+  // ...
+  supportedConversions: [
+    // ... existentes ...
+    {
+      from: ['.novo'],  // ou categoria wildcard como 'video/*'
+      to: ['.mp4'],
+      speedScore: 75,
+      lossless: false,
+    },
+    {
+      from: ['.mp4'],
+      to: ['.novo'],
+      speedScore: 75,
+      lossless: false,
+    },
+  ],
+}
 ```
 
-Se nenhum módulo suporta o par, criar o módulo primeiro seguindo [`docs/guides/adding-a-module.md`](./adding-a-module.md).
+### 2.2. Geração Automática das Rotas e Catálogo
+
+Assim que o motor declara as extensões suportadas e os formatos existem em `FORMAT_CATALOG`:
+- A lista `CONVERTERS` em `src/lib/converters.ts` gera automaticamente os slugs `{from.toLowerCase()}-para-{to.toLowerCase()}`.
+- As páginas SSG do Astro em `/converter/[from]-para-[to]` são geradas no build sem necessidade de código manual.
+- O seletor de motores (`EngineSelector`) e o painel de conversão resolvem a disponibilidade e o motor ideal por pontuação de performance (`speedScore`).
 
 ---
 

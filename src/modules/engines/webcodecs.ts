@@ -1,16 +1,20 @@
 /**
- * src/modules/webcodecs.ts
+ * src/modules/engines/webcodecs.ts
  *
  * Hardware-accelerated Video Transcoder using the native WebCodecs API
  * (VideoDecoder & VideoEncoder) with GPU-backed processing and zero-copy frames.
  *
  * Strict device & codec verification: only offered if the client browser and GPU
  * explicitly support the requested encoder profile via `VideoEncoder.isConfigSupported`.
+ *
+ * Implements Zero-RAM streaming via chunked MP4Box appending and decoupled bitrate presets.
  */
 import * as MP4Box from 'mp4box';
 import { Muxer as Mp4Muxer, ArrayBufferTarget as Mp4ArrayBufferTarget } from 'mp4-muxer';
 import { Muxer as WebmMuxer, ArrayBufferTarget as WebmArrayBufferTarget } from 'webm-muxer';
 import type { IModule, ExecutionContext } from '@/shared/types/module';
+import { getMimeType } from '@/core/knowledge/mimeTypes';
+import { resolveWebCodecsBitrate } from '@/core/knowledge/bitratePresets';
 
 function getTrackDescription(track: MP4Box.MP4Track, mp4boxfile: any): Uint8Array | undefined {
   try {
@@ -38,7 +42,7 @@ export const WebCodecsModule: IModule = {
     version: '1.0.0',
     description: 'Transcodificação de alta velocidade com aceleração por hardware na GPU (NVENC, QuickSync, Apple Silicon).',
     category: 'video',
-    supportedModifiers: ['quality'],
+    supportedModifiers: ['quality', 'bitrate'],
     supportedConversions: [
       {
         // MP4Box is specifically an ISO Base Media File Format parser (MP4 / M4V)
@@ -87,13 +91,14 @@ export const WebCodecsModule: IModule = {
   },
 
   execute: async (inputs, context) => {
-    const fileData = inputs.fileData as Uint8Array;
+    const file = inputs.file as File | Blob | undefined;
+    const fileData = inputs.fileData as Uint8Array | undefined;
     const originalName = inputs.originalName as string;
     const targetFormat = inputs.targetFormat as string;
     const options = (inputs.modifiers as any) || (inputs.options as any) || undefined;
 
-    if (!fileData || !originalName || !targetFormat) {
-      throw new Error('WebCodecs module requires fileData (Uint8Array), originalName, and targetFormat.');
+    if ((!file && !fileData) || !originalName || !targetFormat) {
+      throw new Error('WebCodecs module requires file (File/Blob) or fileData (Uint8Array), originalName, and targetFormat.');
     }
 
     if (typeof window === 'undefined' || !('VideoDecoder' in window) || !('VideoEncoder' in window)) {
@@ -151,11 +156,15 @@ export const WebCodecsModule: IModule = {
               context.onProgress(100, 'Transcodificação na GPU concluída!');
               context.onLog(`[WebCodecs GPU] Sucesso: ${outputFileName} (${(resultBytes.byteLength / 1024 / 1024).toFixed(2)} MB)`);
 
+              const mimeType = getMimeType(outputExt);
+              const outputBlob = new Blob([buffer], { type: mimeType });
+
               resolve({
                 outputData: resultBytes,
+                outputBlob,
                 outputFileName: outputFileName,
                 outputSize: resultBytes.byteLength,
-                mimeType: isWebM ? 'video/webm' : 'video/mp4',
+                mimeType,
               });
             } catch (err) {
               fail(err instanceof Error ? err : String(err));
@@ -226,12 +235,7 @@ export const WebCodecsModule: IModule = {
               },
             });
 
-            const bitrateMap: Record<string, number> = {
-              original: 6_000_000,
-              balanced: 2_500_000,
-              compressed: 1_200_000,
-            };
-            const bitrate = options?.qualityPreset ? (bitrateMap[options.qualityPreset] || 2_500_000) : 2_500_000;
+            const bitrate = resolveWebCodecsBitrate(options);
 
             videoEncoder.configure({
               codec: targetCodec,
@@ -302,14 +306,35 @@ export const WebCodecsModule: IModule = {
           }
         };
 
-        const rawBuffer = fileData.buffer.slice(
-          fileData.byteOffset,
-          fileData.byteOffset + fileData.byteLength
-        ) as ArrayBuffer;
+        // Stream or chunk append
+        (async () => {
+          try {
+            if (file) {
+              const CHUNK_SIZE = 2 * 1024 * 1024;
+              let offset = 0;
+              while (offset < file.size) {
+                const end = Math.min(offset + CHUNK_SIZE, file.size);
+                const slice = file.slice(offset, end);
+                const chunkBuffer = await slice.arrayBuffer();
+                (chunkBuffer as any).fileStart = offset;
+                mp4boxfile.appendBuffer(chunkBuffer, offset + chunkBuffer.byteLength >= file.size);
+                offset = end;
+              }
+              mp4boxfile.flush();
+            } else if (fileData) {
+              const rawBuffer = fileData.buffer.slice(
+                fileData.byteOffset,
+                fileData.byteOffset + fileData.byteLength
+              ) as ArrayBuffer;
 
-        (rawBuffer as any).fileStart = 0;
-        mp4boxfile.appendBuffer(rawBuffer, true);
-        mp4boxfile.flush();
+              (rawBuffer as any).fileStart = 0;
+              mp4boxfile.appendBuffer(rawBuffer, true);
+              mp4boxfile.flush();
+            }
+          } catch (readErr) {
+            fail(readErr instanceof Error ? readErr : String(readErr));
+          }
+        })();
       } catch (err) {
         fail(err instanceof Error ? err : String(err));
       }

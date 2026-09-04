@@ -1,31 +1,54 @@
 import React from 'react';
 import { Typography } from '@/ui/components/core';
 import { cn } from '@/lib/utils';
+import { AlertTriangle } from 'lucide-react';
 import type { ConversionModifiers, BitDepthChoice } from '@/shared/types/conversionModifiers';
+import {
+  BIT_DEPTH_PRESETS,
+  DEFAULT_BIT_DEPTHS,
+  type BitDepthPresetData,
+} from '@/core/knowledge/colorPresets';
 
 export interface BitDepthCardProps {
   options: ConversionModifiers;
   onChange: (updated: Partial<ConversionModifiers>) => void;
+  allowedOptions?: (string | number)[];
+  warningMessage?: string;
 }
 
-export function BitDepthCard({ options, onChange }: BitDepthCardProps) {
+export function BitDepthCard({
+  options,
+  onChange,
+  allowedOptions,
+  warningMessage,
+}: BitDepthCardProps) {
   const currentDepth = options.bitDepth || 'auto';
 
-  const presets: { id: BitDepthChoice; label: string; desc: string }[] = [
-    { id: 'auto', label: 'Automático', desc: 'Padrão do codec' },
-    { id: '8bit', label: '8-bit (SDR)', desc: '16.7M cores • Máxima compatibilidade' },
-    { id: '10bit', label: '10-bit (HDR)', desc: '1.07B cores • Evita color banding em gradientes' },
-    { id: '12bit', label: '12-bit (Master)', desc: 'Masterização profissional / cinema' },
-  ];
+  const activeAllowed: BitDepthChoice[] = allowedOptions && allowedOptions.length > 0
+    ? (allowedOptions.map(String) as BitDepthChoice[])
+    : DEFAULT_BIT_DEPTHS;
+
+  const presets: BitDepthPresetData[] = activeAllowed
+    .filter((id) => BIT_DEPTH_PRESETS[id])
+    .map((id) => BIT_DEPTH_PRESETS[id]);
+
+  const currentLabel = BIT_DEPTH_PRESETS[currentDepth]?.label || 'Automático';
 
   return (
     <div className="space-y-2 pt-0.5">
+      {warningMessage && (
+        <div className="flex items-center gap-2 p-2 rounded bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs">
+          <AlertTriangle className="size-4 shrink-0" />
+          <span>{warningMessage}</span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <Typography variant="caption" color="muted">
           Profundidade de cor (bits por canal):
         </Typography>
         <span className="text-[11px] font-mono text-primary font-medium">
-          {presets.find((p) => p.id === currentDepth)?.label || 'Automático'}
+          {currentLabel}
         </span>
       </div>
 

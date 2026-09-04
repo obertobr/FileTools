@@ -3,23 +3,25 @@ import { Layers, Info, CheckSquare, Square, CheckCircle2, AlertTriangle, Loader2
 import { Badge, Typography } from '@/ui/components/core';
 import { cn } from '@/lib/utils';
 import type { MediaProbeResult } from '@/core/media/mediaProbe';
-import { categoryOfExtension } from '@/lib/formats';
 
 export interface AudioMergeCardProps {
   selectedTracks: number[];
   onChange: (tracks: number[]) => void;
   probedMedia?: MediaProbeResult;
   targetFormat?: string;
+  isLocked?: boolean;
+  lockReason?: string;
+  warningMessage?: string;
 }
 
 export function AudioMergeCard({
   selectedTracks,
   onChange,
   probedMedia,
-  targetFormat,
+  isLocked,
+  lockReason,
+  warningMessage,
 }: AudioMergeCardProps) {
-  const isVideoTarget = categoryOfExtension(targetFormat || '') === 'video';
-  const targetNoun = isVideoTarget ? 'vídeo final' : 'arquivo de áudio final';
 
   // If still probing, display a non-blocking loading state
   if (!probedMedia) {
@@ -87,6 +89,20 @@ export function AudioMergeCard({
 
   return (
     <div className="space-y-3">
+      {isLocked && (
+        <div className="p-2.5 rounded-lg border border-primary/40 bg-primary/10 flex items-center gap-2.5 text-primary text-[11px] font-medium">
+          <Info className="size-4 text-primary shrink-0" />
+          <span>{lockReason || 'Obrigatório para esta conversão.'}</span>
+        </div>
+      )}
+
+      {warningMessage && (
+        <div className="p-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 flex items-start gap-2.5 text-amber-300 text-[11px]">
+          <AlertTriangle className="size-4 text-amber-400 shrink-0 mt-0.5" />
+          <span>{warningMessage}</span>
+        </div>
+      )}
+
       {/* Banner Informativo Dinâmico */}
       {isMultiple && (
         <div className="p-2.5 rounded-lg border border-primary/40 bg-primary/5 flex items-start gap-2.5">
@@ -96,7 +112,7 @@ export function AudioMergeCard({
               Mixagem Ativada ({selectedTracks.length} faixas combinadas)
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Todas as faixas marcadas abaixo serão mixadas em um único fluxo de áudio no {targetNoun}.
+              Todas as faixas marcadas abaixo serão mixadas em um único fluxo de áudio no arquivo final.
             </p>
           </div>
         </div>
@@ -110,7 +126,7 @@ export function AudioMergeCard({
               Extração Direta (Faixa {selectedTracks[0] + 1})
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Apenas esta faixa selecionada fará parte do {targetNoun}, sem mixagem.
+              Apenas esta faixa selecionada fará parte do arquivo final, sem mixagem.
             </p>
           </div>
         </div>
@@ -124,7 +140,7 @@ export function AudioMergeCard({
               Nenhuma faixa selecionada
             </div>
             <p className="text-[11px] text-destructive/80 leading-relaxed">
-              O {targetNoun} será gerado mudo (sem áudio). Selecione ao menos 1 faixa.
+              O arquivo final será gerado mudo (sem áudio). Selecione ao menos 1 faixa.
             </p>
           </div>
         </div>

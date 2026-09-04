@@ -1,8 +1,7 @@
 import React from 'react';
 import { Search, Plus, AlertTriangle } from 'lucide-react';
 import { Card, Typography } from '@/ui/components/core';
-import type { ModifierCategoryId } from '@/shared/types/conversionModifiers';
-import type { ModifierDefinition } from './ModifierDefinitions';
+import type { ModifierCategoryId, ModifierDefinition } from '@/shared/types/conversionModifiers';
 import { isModifierIncompatibleWithEngine } from '@/modules/engineCapabilities';
 
 export interface AddModifierPickerProps {

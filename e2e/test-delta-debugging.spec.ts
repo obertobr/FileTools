@@ -19,7 +19,7 @@ test.describe('Delta Debugging (DDmin) Conversion Testing Engine', () => {
 
     const ddResult = await page.evaluate(async ({ fileBytes }) => {
       const { ModuleRegistry } = await import('/src/modules/registry.ts');
-      const { resetFFmpegMT } = await import('/src/modules/ffmpeg-mt.ts');
+      const { resetFFmpegMT } = await import('/src/modules/engines/ffmpeg-mt.ts');
       const {
         runDeltaDebugging,
         getApplicableModifierPool,

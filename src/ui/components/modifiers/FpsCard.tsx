@@ -1,163 +1,88 @@
 import React from 'react';
 import { Typography } from '@/ui/components/core';
 import { cn } from '@/lib/utils';
+import { AlertTriangle } from 'lucide-react';
 import type { ConversionModifiers } from '@/shared/types/conversionModifiers';
 import type { MediaProbeResult } from '@/core/media/mediaProbe';
+import {
+  FPS_PRESETS,
+  DEFAULT_VIDEO_FPS_OPTIONS,
+  type FpsPresetData,
+} from '@/core/knowledge/fpsPresets';
 
 export interface FpsCardProps {
   options: ConversionModifiers;
   onChange: (updated: Partial<ConversionModifiers>) => void;
   targetFormat?: string;
   probedMedia?: MediaProbeResult;
+  allowedOptions?: (number | string)[];
+  warningMessage?: string;
 }
 
-export function FpsCard({ options, onChange, targetFormat, probedMedia }: FpsCardProps) {
-  const isGif = targetFormat?.toLowerCase().replace(/^\.+/, '') === 'gif';
+export function FpsCard({
+  options,
+  onChange,
+  probedMedia,
+  allowedOptions,
+  warningMessage,
+}: FpsCardProps) {
   const probedFps = probedMedia?.fps || options.probedMedia?.fps;
 
-  // For video, fallback to probedFps if available, else 30; for GIF fallback to 12
-  const currentFps = options.customFps || (isGif ? (options.gifFps || 12) : (probedFps || 30));
+  // 1. Determine allowed options from props or default knowledge base
+  const activeAllowed = allowedOptions && allowedOptions.length > 0
+    ? allowedOptions.map(Number).filter((n) => !isNaN(n))
+    : DEFAULT_VIDEO_FPS_OPTIONS;
+
   const isCustomFps = Boolean(options.isCustomFps);
+  const defaultBaseFps = activeAllowed[0] || 30;
+  const currentFps = options.customFps || (probedFps || defaultBaseFps);
 
-  if (isGif) {
-    const gifPresets = [
-      { value: 10, label: '10' },
-      { value: 12, label: '12' },
-      { value: 15, label: '15' },
-      { value: 24, label: '24' },
-      { value: 30, label: '30' },
-    ];
+  // 2. Build preset items from knowledge base
+  const presets: { fps: number; label: string; desc: string; isNative?: boolean }[] = [];
 
-    return (
-      <div className="space-y-2 pt-0.5">
-        <div className="flex items-center justify-between">
-          <Typography variant="caption" color="muted">
-            Quantidade de quadros exibidos por segundo:
-          </Typography>
-          <span className="text-[11px] font-mono text-primary font-medium">
-            {currentFps} fps
-          </span>
-        </div>
+  // Check if probedFps matches a preset or is non-standard
+  const hasMatchingProbed = probedFps && activeAllowed.includes(probedFps);
 
-        <div className="grid grid-cols-6 gap-1.5">
-          {gifPresets.map((item) => {
-            const isSelected = !isCustomFps && (options.gifFps || 12) === item.value;
-            return (
-              <button
-                key={item.value}
-                type="button"
-                onClick={() => onChange({ targetFps: item.value, gifFps: item.value, customFps: item.value, isCustomFps: false })}
-                className={cn(
-                  'px-1.5 py-1 text-[11px] rounded border transition-colors select-none text-center font-medium',
-                  isSelected
-                    ? 'border-primary bg-primary/10 text-primary font-semibold'
-                    : 'border-border bg-surface-raised text-muted-foreground hover:text-foreground'
-                )}
-              >
-                {item.label}
-              </button>
-            );
-          })}
+  for (const fpsVal of activeAllowed) {
+    const data: FpsPresetData | undefined = FPS_PRESETS[fpsVal];
+    const isNative = probedFps === fpsVal;
+    let label = data ? `${data.label} fps` : `${fpsVal} fps`;
+    let desc = isNative ? 'Nativo do arquivo' : (fpsVal >= 60 ? 'Fluido' : 'Padrão');
 
-          <button
-            type="button"
-            onClick={() => {
-              const val = options.customFps || options.gifFps || 18;
-              onChange({ isCustomFps: true, targetFps: val, customFps: val, gifFps: val });
-            }}
-            className={cn(
-              'px-1.5 py-1 text-[11px] rounded border transition-colors select-none text-center font-medium',
-              isCustomFps
-                ? 'border-primary bg-primary/10 text-primary font-semibold'
-                : 'border-border bg-surface-raised text-muted-foreground hover:text-foreground'
-            )}
-          >
-            Custom
-          </button>
-        </div>
+    if (isNative) {
+      label = `Original (${fpsVal} fps)`;
+    }
 
-        {isCustomFps && (
-          <div className="flex items-center gap-2 pt-1">
-            <span className="text-[11px] text-muted-foreground">FPS personalizado:</span>
-            <input
-              type="number"
-              min="1"
-              max="120"
-              value={options.customFps || 18}
-              onChange={(e) => {
-                const val = Math.max(1, Math.min(120, parseInt(e.target.value, 10) || 1));
-                onChange({ targetFps: val, customFps: val, gifFps: val, isCustomFps: true });
-              }}
-              className="w-20 rounded border border-primary bg-surface-raised px-2 py-0.5 text-xs text-foreground focus:outline-none"
-            />
-            <span className="text-[11px] text-muted-foreground font-mono">fps (1 a 120)</span>
-          </div>
-        )}
-      </div>
-    );
+    presets.push({
+      fps: fpsVal,
+      label,
+      desc,
+      isNative,
+    });
   }
 
-  // Target is Video (e.g. MP4, MKV, WebM, etc.)
-  const basePresets = [
-    { fps: 24, label: '24 fps', desc: 'Cinema' },
-    { fps: 30, label: '30 fps', desc: 'Padrão' },
-    { fps: 60, label: '60 fps', desc: 'Fluido (60p)' },
-  ];
-
-  let videoPresets: { id: string; fps: number; label: string; desc: string }[] = [];
-
-  if (probedFps) {
-    const matchesBase = basePresets.find((p) => p.fps === probedFps);
-    if (matchesBase) {
-      // The video's FPS is the same as an existing preset: rename that preset button to `Original (${probedFps} fps)`
-      videoPresets = basePresets.map((p) => {
-        if (p.fps === probedFps) {
-          return {
-            id: String(p.fps),
-            fps: p.fps,
-            label: `Original (${probedFps} fps)`,
-            desc: 'Nativo do arquivo',
-          };
-        }
-        return {
-          id: String(p.fps),
-          fps: p.fps,
-          label: p.label,
-          desc: p.desc,
-        };
-      });
-    } else {
-      // The video's FPS is non-standard (e.g. 25 fps, 50 fps, 15 fps): prepend it to the presets
-      videoPresets = [
-        {
-          id: String(probedFps),
-          fps: probedFps,
-          label: `Original (${probedFps} fps)`,
-          desc: 'Nativo do arquivo',
-        },
-        ...basePresets.map((p) => ({
-          id: String(p.fps),
-          fps: p.fps,
-          label: p.label,
-          desc: p.desc,
-        })),
-      ];
-    }
-  } else {
-    // No probed FPS available
-    videoPresets = basePresets.map((p) => ({
-      id: String(p.fps),
-      fps: p.fps,
-      label: p.label,
-      desc: p.desc,
-    }));
+  // If non-standard probedFps is not in allowedOptions, prepend it as Original
+  if (probedFps && !hasMatchingProbed) {
+    presets.unshift({
+      fps: probedFps,
+      label: `Original (${probedFps} fps)`,
+      desc: 'Nativo do arquivo',
+      isNative: true,
+    });
   }
 
   return (
     <div className="space-y-2 pt-0.5">
+      {warningMessage && (
+        <div className="flex items-start gap-2 p-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px]">
+          <AlertTriangle className="size-3.5 shrink-0 mt-0.5 text-amber-400" />
+          <span>{warningMessage}</span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <Typography variant="caption" color="muted">
-          Taxa de quadros do vídeo final:
+          Quantidade de quadros exibidos por segundo:
         </Typography>
         <span className="text-[11px] font-mono text-primary font-medium">
           {!isCustomFps && currentFps === probedFps
@@ -166,20 +91,17 @@ export function FpsCard({ options, onChange, targetFormat, probedMedia }: FpsCar
         </span>
       </div>
 
-      <div className={cn(
-        'grid gap-1.5',
-        videoPresets.length >= 4 ? 'grid-cols-5' : 'grid-cols-4'
-      )}>
-        {videoPresets.map((item) => {
+      <div className={cn('grid gap-1.5', presets.length <= 4 ? 'grid-cols-5' : 'grid-cols-6')}>
+        {presets.map((item) => {
           const isSelected = !isCustomFps && (
             options.customFps !== undefined
               ? options.customFps === item.fps
-              : item.fps === (probedFps || 30)
+              : item.fps === (probedFps || defaultBaseFps)
           );
 
           return (
             <button
-              key={item.id}
+              key={item.fps}
               type="button"
               onClick={() => {
                 onChange({ targetFps: item.fps, customFps: item.fps, gifFps: item.fps, isCustomFps: false });
@@ -199,15 +121,15 @@ export function FpsCard({ options, onChange, targetFormat, probedMedia }: FpsCar
 
         <button
           type="button"
-            onClick={() => {
-              const val = options.customFps || probedFps || 30;
-              onChange({
-                isCustomFps: true,
-                targetFps: val,
-                customFps: val,
-                gifFps: val,
-              });
-            }}
+          onClick={() => {
+            const val = options.customFps || probedFps || defaultBaseFps;
+            onChange({
+              isCustomFps: true,
+              targetFps: val,
+              customFps: val,
+              gifFps: val,
+            });
+          }}
           className={cn(
             'p-2 text-left rounded-md border transition-colors select-none',
             isCustomFps
@@ -227,7 +149,7 @@ export function FpsCard({ options, onChange, targetFormat, probedMedia }: FpsCar
             type="number"
             min="1"
             max="120"
-            value={options.customFps || 30}
+            value={options.customFps || defaultBaseFps}
             onChange={(e) => {
               const val = Math.max(1, Math.min(120, parseInt(e.target.value, 10) || 1));
               onChange({ targetFps: val, customFps: val, gifFps: val, isCustomFps: true });

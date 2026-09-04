@@ -1,20 +1,20 @@
-﻿/**
+/**
  * src/modules/registry.ts
  *
  * Central registry for all conversion modules.
  * Manages engines, performance scoring, engine resolution, and dynamic conversion options.
  */
 import type { IModule, ModuleManifest, AccelerationType } from '@/shared/types/module';
-import { FORMATS } from '../lib/formats';
+import { FORMATS } from '@/lib/formats';
 
-import { RemuxModule } from './remux';
-import { WebCodecsModule } from './webcodecs';
-import { FFmpegMTModule } from './ffmpeg-mt';
-import { FFmpegModule } from './ffmpeg';
-import { MagickModule } from './magick';
-import { PdfModule } from './pdf';
-import { MammothModule } from './mammoth';
-import { SheetJSModule } from './sheetjs';
+import { RemuxModule } from './engines/remux';
+import { WebCodecsModule } from './engines/webcodecs';
+import { FFmpegMTModule } from './engines/ffmpeg-mt';
+import { FFmpegModule } from './engines/ffmpeg';
+import { MagickModule } from './engines/magick';
+import { PdfModule } from './engines/pdf';
+import { MammothModule } from './engines/mammoth';
+import { SheetJSModule } from './engines/sheetjs';
 
 export const ModuleRegistry: Record<string, IModule> = {
   'stream-copy': RemuxModule,
