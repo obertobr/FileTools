@@ -177,17 +177,22 @@ O sistema de opções avançadas (Pilha de Modificadores (Modifier Stack)) obede
 
 ### 12.1. Matriz de Compatibilidade Motor x Capacidade
 
-| Modificadorre`) |
+| Modificador | Remux (`remux`) | FFmpeg Multi-Thread (`ffmpeg-core-mt`) | FFmpeg Single-Thread (`ffmpeg-core`) |
 |---|:---:|:---:|:---:|
 | **Cópia Instantânea (`-c copy`)** | Sim | Sim | Sim |
 | **Taxa de Quadros (`-r fps`)** | ❌ Incompatível | ✅ Total | ✅ Total |
 | **Escala / Resolução (`-vf scale`)** | ❌ Incompatível | ✅ Total | ✅ Total |
-| **Qualidade / CRF / Bitrate** | ❌ Incompatível | ✅ Total | ✅ Total |
+| **Qualidade / CRF** | ❌ Incompatível | ✅ Total | ✅ Total |
+| **Taxa de Bits / Bitrate (`-b:v`, `-b:a`)** | ❌ Incompatível | ✅ Total | ✅ Total |
+| **Formato de Pixel (`-pix_fmt`)** | ❌ Incompatível | ✅ Total | ✅ Total |
+| **Profundidade de Cor (8/10/12-bit)** | ❌ Incompatível | ✅ Total | ✅ Total |
+| **Espaço de Cor (`-colorspace`)** | ❌ Incompatível | ✅ Total | ✅ Total |
 | **Transcodificação de Codec** | ❌ Incompatível | ✅ Total | ✅ Total |
 | **Unir Faixas (`amix` filter)** | ❌ Incompatível | ✅ Total | ✅ Total |
 | **Seleção de Faixas de Áudio** | ✅ Suportado | ✅ Total | ✅ Total |
 | **Subtítulos Embutidos** | ✅ Suportado | ✅ Total | ✅ Total |
 | **Duração Imagem -> Vídeo** | ❌ Incompatível | ✅ Total | ✅ Total |
+| **Controle de Threads (`-threads`)** | ❌ Incompatível | ✅ Total (Multi-Core) | ❌ Incompatível (WASM 1 thread) |
 
 
 ### 12.2. Inversão de Controle no ModuleManifest (`supportedModifiers`)

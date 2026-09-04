@@ -1,5 +1,4 @@
-import React from 'react';
-import { Volume2, Layers, MessageSquare, Cpu, Sparkles, Film, Maximize2, Gauge, Music, Clock } from 'lucide-react';
+import { Volume2, Layers, MessageSquare, Cpu, Sparkles, Film, Maximize2, Gauge, Music, Clock, Palette, Binary, Activity, Compass } from 'lucide-react';
 import type { ModifierCategoryId } from '@/shared/types/conversionModifiers';
 import { categoryOfExtension } from '@/lib/formats';
 
@@ -110,13 +109,53 @@ export const MODIFIER_DEFINITIONS: ModifierDefinition[] = [
   {
     id: 'audio_codec',
     title: 'Codec de Áudio',
-    description: 'Alterne entre MP3, AAC, Opus, Vorbis, FLAC e outros formatos de áudio.',
+    description: 'Alterne entre MP3, AAC, Opus, Vorbis, FLAC e configure codecs por faixa individual.',
     icon: Music,
     isApplicable: (target, _isMT, sourceExt) => {
       const srcCat = categoryOfExtension(sourceExt || '');
       const tgtCat = categoryOfExtension(target);
       if (srcCat === 'image' || srcCat === 'document' || target === 'gif') return false;
       return tgtCat === 'video' || tgtCat === 'audio';
+    },
+  },
+  {
+    id: 'pixel_format',
+    title: 'Formato de Pixel (Pix Fmt)',
+    description: 'Ajuste a amostragem de cores: YUV420p (universal), YUV422p, YUV444p, 10-bit ou RGB.',
+    icon: Palette,
+    isApplicable: (target) => {
+      const tgtCat = categoryOfExtension(target);
+      return tgtCat === 'video';
+    },
+  },
+  {
+    id: 'bit_depth',
+    title: 'Profundidade de Cor (Bit Depth)',
+    description: 'Defina 8-bit (padrão), 10-bit (HDR/Wide Range) ou 12-bit para evitar color banding.',
+    icon: Binary,
+    isApplicable: (target) => {
+      const tgtCat = categoryOfExtension(target);
+      return tgtCat === 'video';
+    },
+  },
+  {
+    id: 'bitrate',
+    title: 'Taxa de Bits (Bitrate)',
+    description: 'Limite ou force taxas de bits específicas para os fluxos de vídeo e áudio.',
+    icon: Activity,
+    isApplicable: (target) => {
+      const tgtCat = categoryOfExtension(target);
+      return tgtCat === 'video' || tgtCat === 'audio';
+    },
+  },
+  {
+    id: 'color_space',
+    title: 'Espaço de Cor (Color Space)',
+    description: 'Configure Rec. 709 (HD/Web), Rec. 2020 (4K/HDR), Rec. 601 ou sRGB.',
+    icon: Compass,
+    isApplicable: (target) => {
+      const tgtCat = categoryOfExtension(target);
+      return tgtCat === 'video';
     },
   },
   {

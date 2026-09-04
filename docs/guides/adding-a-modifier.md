@@ -74,6 +74,10 @@ export type ModifierCategoryId =
   | 'audio_merge'
   | 'subtitles'
   | 'video_duration'
+  | 'pixel_format'
+  | 'bit_depth'
+  | 'bitrate'
+  | 'color_space'
   | 'meu_modificador'; // <-- SEU NOVO MODIFICADOR
 ```
 

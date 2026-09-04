@@ -99,6 +99,10 @@ export function getApplicableModifierPool(
     'audio_merge',
     'subtitles',
     'video_duration',
+    'pixel_format',
+    'bit_depth',
+    'bitrate',
+    'color_space',
   ];
 
   const pool: ModifierPatch[] = [];
@@ -201,6 +205,44 @@ export function getApplicableModifierPool(
       id: 'audio_codec',
       description: 'Codec de áudio compatível com o contêiner',
       patch: { audioCodec: 'auto' },
+    });
+  }
+
+  // 11. Pixel Format
+  if (isVideoOutput && !isGifOutput && isSupported('pixel_format')) {
+    pool.push({
+      id: 'pixel_format',
+      description: 'Formato de pixel universal yuv420p',
+      patch: { pixelFormat: 'yuv420p' },
+    });
+  }
+
+  // 12. Bit Depth
+  if (isVideoOutput && !isGifOutput && isSupported('bit_depth')) {
+    pool.push({
+      id: 'bit_depth',
+      description: 'Profundidade de cor padrão 8-bit SDR',
+      patch: { bitDepth: '8bit' },
+    });
+  }
+
+  // 13. Bitrate
+  if ((isVideoOutput || isAudioOutput) && !isGifOutput && isSupported('bitrate')) {
+    pool.push({
+      id: 'bitrate',
+      description: 'Taxa de bits configurada (Vídeo 2.5M, Áudio 192k)',
+      patch: isVideoOutput
+        ? { videoBitrate: '2.5M', audioBitrate: '192k' }
+        : { audioBitrate: '192k' },
+    });
+  }
+
+  // 14. Color Space
+  if (isVideoOutput && !isGifOutput && isSupported('color_space')) {
+    pool.push({
+      id: 'color_space',
+      description: 'Espaço de cor HDTV Rec. 709',
+      patch: { colorSpace: 'bt709' },
     });
   }
 

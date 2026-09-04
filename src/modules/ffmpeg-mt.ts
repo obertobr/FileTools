@@ -178,13 +178,35 @@ function getConversionArgs(
       : (crfMap[options?.qualityPreset || 'original'] || '18'));
 
   // Optimal libx264 args for 32-bit WASM: uses slice-threading with the optimal/configured thread allocation
-  // and guarantees universal yuv420p pixel format compatibility avoiding WASM SIMD signature errors.
+  // and respects pixel format and bit depth modifiers.
+  const { pixFmt, profileArgs, isCustom: hasCustomPixFmt } = getPixelFormatAndBitDepth(options);
+
   const getLibx264Args = () => [
     '-threads', String(profile.encoderThreads),
     '-preset', 'ultrafast',
     '-crf', crfVal,
-    '-pix_fmt', 'yuv420p',
+    '-pix_fmt', pixFmt,
+    ...profileArgs,
   ];
+
+  const generalPixFmtArgs = hasCustomPixFmt ? ['-pix_fmt', pixFmt] : [];
+
+  // Bitrate handling
+  const effectiveVideoBitrate = options?.activeCategories?.includes('bitrate')
+    ? (options.isCustomVideoBitrate && options.customVideoBitrateKbps
+        ? `${options.customVideoBitrateKbps}k`
+        : (options.videoBitrate && options.videoBitrate !== 'auto' ? options.videoBitrate : undefined))
+    : undefined;
+  const videoBitrateArgs = effectiveVideoBitrate ? ['-b:v', effectiveVideoBitrate] : [];
+
+  const effectiveAudioBitrate = options?.activeCategories?.includes('bitrate')
+    ? (options.isCustomAudioBitrate && options.customAudioBitrateKbps
+        ? `${options.customAudioBitrateKbps}k`
+        : (options.audioBitrate && options.audioBitrate !== 'auto' ? options.audioBitrate : undefined))
+    : undefined;
+
+  // Color space handling
+  const colorSpaceArgs = getColorSpaceArgs(options);
 
   // Video resolution scale filter: decoupled from preset labels by receiving canonical targetWidth and targetHeight
   let videoScaleFilter: string[] = [];
@@ -192,7 +214,9 @@ function getConversionArgs(
     const width = options.targetWidth || options.customScaleWidth || options.gifScaleWidth;
     const height = options.targetHeight ?? -2;
     if (width && width > 0) {
-      videoScaleFilter = ['-vf', `scale=${width}:${height}`];
+      const w = width % 2 === 0 ? width : width - 1;
+      const h = height > 0 ? (height % 2 === 0 ? height : height - 1) : height;
+      videoScaleFilter = ['-vf', `scale=${w}:${h}`];
     }
   }
 
@@ -221,18 +245,52 @@ function getConversionArgs(
       ...encMtFlags,
       '-c:v', vCodec,
       '-t', String(duration),
-      '-pix_fmt', 'yuv420p',
-      ...(vCodec === 'libx264' ? getLibx264Args() : []),
+      ...(vCodec === 'libx264' ? getLibx264Args() : ['-pix_fmt', pixFmt]),
+      ...videoBitrateArgs,
+      ...colorSpaceArgs,
       ...scaleFilter,
     ];
+  }
+
+  // Audio encoder helper
+  function getAudioCodecFlags(codec: string, audioExt: string, streamIdx?: number): string[] {
+    const s = streamIdx !== undefined ? `:${streamIdx}` : '';
+    const bArgs = effectiveAudioBitrate ? [`-b:a${s}`, effectiveAudioBitrate] : [];
+
+    if (codec && codec !== 'auto') {
+      if (codec === 'copy') return [`-c:a${s}`, 'copy'];
+      if (codec === 'mp3') return [`-c:a${s}`, 'libmp3lame', `-qscale:a${s}`, '2', ...bArgs];
+      if (codec === 'aac') return [`-c:a${s}`, 'aac', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '192k'])];
+      if (codec === 'vorbis') return [`-c:a${s}`, 'libvorbis', `-qscale:a${s}`, '5', ...bArgs];
+      if (codec === 'opus') return [`-c:a${s}`, 'libopus', `-ar${s}`, '48000', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '128k'])];
+      if (codec === 'flac') return [`-c:a${s}`, 'flac'];
+      if (codec === 'pcm') return [`-c:a${s}`, 'pcm_s16le'];
+      if (codec === 'ac3') return [`-c:a${s}`, 'ac3', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '192k'])];
+    }
+
+    if (audioExt === '.mp3') return [`-c:a${s}`, 'libmp3lame', `-qscale:a${s}`, '2', ...bArgs];
+    if (audioExt === '.wav') return [`-c:a${s}`, 'pcm_s16le'];
+    if (audioExt === '.ogg') return [`-c:a${s}`, 'libvorbis', `-qscale:a${s}`, '5', ...bArgs];
+    if (audioExt === '.flac') return [`-c:a${s}`, 'flac'];
+    if (audioExt === '.m4a' || audioExt === '.aac') return [`-c:a${s}`, 'aac', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '192k'])];
+    if (audioExt === '.opus') return [`-c:a${s}`, 'libopus', `-ar${s}`, '48000', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '128k'])];
+    if (audioExt === '.wma') return [`-c:a${s}`, 'wmav2', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '128k'])];
+    if (audioExt === '.aiff' || audioExt === '.aif') return [`-c:a${s}`, 'pcm_s16be'];
+    if (audioExt === '.ac3') return [`-c:a${s}`, 'ac3', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '192k'])];
+    if (audioExt === '.m4r') return [`-c:a${s}`, 'aac', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '192k']), '-f', 'ipod'];
+
+    // Default container audio codec fallbacks
+    if (audioExt === '.webm' || audioExt === '.ogv') return [`-c:a${s}`, 'libvorbis', ...bArgs];
+    if (audioExt === '.avi') return [`-c:a${s}`, 'libmp3lame', ...bArgs];
+    if (audioExt === '.wmv') return [`-c:a${s}`, 'wmav2', ...bArgs];
+    if (audioExt === '.mpg' || audioExt === '.mpeg' || audioExt === '.vob') return [`-c:a${s}`, 'mp2', ...bArgs];
+    return [`-c:a${s}`, 'aac', ...(bArgs.length > 0 ? bArgs : [`-b:a${s}`, '192k'])];
   }
 
   // Audio to Video with black screen
   if (isAudioToVideo) {
     const vCodec = userVideoCodec === 'vp8' ? 'libvpx' : (userVideoCodec === 'vp9' ? 'libvpx-vp9' : (userVideoCodec === 'hevc' ? 'libx265' : 'libx264'));
-    const audioFlags = userAudioCodec && userAudioCodec !== 'auto'
-      ? getAudioEncoderArgs(to)
-      : (to === '.webm' ? ['-c:a', 'libvorbis'] : ['-c:a', 'aac']);
+    const audioFlags = getAudioCodecFlags(userAudioCodec || 'auto', to);
     return [
       ...encMtFlags,
       '-filter_complex', 'color=c=black:s=1280x720:r=30[v]',
@@ -240,9 +298,11 @@ function getConversionArgs(
       '-map', '0:a:0?',
       '-c:v', vCodec,
       '-tune', 'stillimage',
-      '-pix_fmt', 'yuv420p',
+      '-pix_fmt', pixFmt,
       '-shortest',
-      ...(vCodec === 'libx264' ? getLibx264Args() : []),
+      ...(vCodec === 'libx264' ? getLibx264Args() : generalPixFmtArgs),
+      ...videoBitrateArgs,
+      ...colorSpaceArgs,
       ...videoScaleFilter,
       ...audioFlags,
     ];
@@ -259,33 +319,6 @@ function getConversionArgs(
       vfParts.push('flags=lanczos');
     }
     return [...encMtFlags, '-vf', vfParts.join(','), '-loop', '0'];
-  }
-
-  // Audio encoder helper
-  function getAudioEncoderArgs(audioExt: string): string[] {
-    if (userAudioCodec && userAudioCodec !== 'auto') {
-      if (userAudioCodec === 'copy') return ['-c:a', 'copy'];
-      if (userAudioCodec === 'mp3') return ['-c:a', 'libmp3lame', '-qscale:a', '2'];
-      if (userAudioCodec === 'aac') return ['-c:a', 'aac', '-b:a', '192k'];
-      if (userAudioCodec === 'vorbis') return ['-c:a', 'libvorbis', '-qscale:a', '5'];
-      if (userAudioCodec === 'opus') return ['-c:a', 'libopus', '-ar', '48000', '-b:a', '128k'];
-      if (userAudioCodec === 'flac') return ['-c:a', 'flac'];
-      if (userAudioCodec === 'pcm') return ['-c:a', 'pcm_s16le'];
-      if (userAudioCodec === 'ac3') return ['-c:a', 'ac3', '-b:a', '192k'];
-    }
-
-    if (audioExt === '.mp3') return ['-c:a', 'libmp3lame', '-qscale:a', '2'];
-    if (audioExt === '.wav') return ['-c:a', 'pcm_s16le'];
-    if (audioExt === '.ogg') return ['-c:a', 'libvorbis', '-qscale:a', '5'];
-    if (audioExt === '.flac') return ['-c:a', 'flac'];
-    if (audioExt === '.m4a') return ['-c:a', 'aac', '-b:a', '192k'];
-    if (audioExt === '.aac') return ['-c:a', 'aac', '-b:a', '192k'];
-    if (audioExt === '.opus') return ['-c:a', 'libopus', '-ar', '48000', '-b:a', '128k'];
-    if (audioExt === '.wma') return ['-c:a', 'wmav2', '-b:a', '128k'];
-    if (audioExt === '.aiff' || audioExt === '.aif') return ['-c:a', 'pcm_s16be'];
-    if (audioExt === '.ac3') return ['-c:a', 'ac3', '-b:a', '192k'];
-    if (audioExt === '.m4r') return ['-c:a', 'aac', '-b:a', '192k', '-f', 'ipod'];
-    return [];
   }
 
   const videoExts = [
@@ -310,7 +343,7 @@ function getConversionArgs(
           ...encMtFlags,
           '-vn',
           '-map', `0:a:${selected[0]}`,
-          ...getAudioEncoderArgs(to),
+          ...getAudioCodecFlags(userAudioCodec || 'auto', to),
         ];
       }
       // Multiple tracks: mix with amix filter
@@ -321,33 +354,33 @@ function getConversionArgs(
         '-filter_complex', amixFilter,
         '-map', '[aout]',
         '-vn',
-        ...getAudioEncoderArgs(to),
+        ...getAudioCodecFlags(userAudioCodec || 'auto', to),
       ];
     }
-    return [...encMtFlags, '-vn', ...getAudioEncoderArgs(to)];
+    return [...encMtFlags, '-vn', ...getAudioCodecFlags(userAudioCodec || 'auto', to)];
   }
 
   // 3. Audio to Audio Cross-Conversion
   if (audioExts.includes(from) && audioExts.includes(to)) {
-    return [...encMtFlags, ...getAudioEncoderArgs(to)];
+    return [...encMtFlags, ...getAudioCodecFlags(userAudioCodec || 'auto', to)];
   }
 
   // Helper for video audio stream
   const isMute = (isAudioCategoryActive || isMergeActive) && (options?.selectedAudioTracks?.length === 0);
-  const defaultAudioCodec = (
-    to === '.webm' || to === '.ogv'
-      ? ['-c:a', 'libvorbis']
-      : (to === '.avi'
-        ? ['-c:a', 'libmp3lame']
-        : (to === '.wmv'
-          ? ['-c:a', 'wmav2']
-          : (to === '.mpg' || to === '.mpeg' || to === '.vob'
-            ? ['-c:a', 'mp2']
-            : ['-c:a', 'aac'])))
-  );
-  const audioCodecArgs = userAudioCodec && userAudioCodec !== 'auto'
-    ? getAudioEncoderArgs(to)
-    : defaultAudioCodec;
+
+  let audioCodecArgs: string[] = [];
+  const selectedAudioTracks = options?.selectedAudioTracks ?? [0];
+  const isMultiTrack = isAudioCategoryActive && !isMergeActive && selectedAudioTracks.length > 1;
+  const isPerTrackCodec = isMultiTrack && options?.syncAllAudioCodecs === false && options?.trackAudioCodecs;
+
+  if (isPerTrackCodec) {
+    audioCodecArgs = selectedAudioTracks.flatMap((trackIdx, outputStreamIdx) => {
+      const trackCodec = options.trackAudioCodecs?.[trackIdx] || userAudioCodec || 'auto';
+      return getAudioCodecFlags(trackCodec, to, outputStreamIdx);
+    });
+  } else {
+    audioCodecArgs = getAudioCodecFlags(userAudioCodec || 'auto', to);
+  }
 
   const videoAudioFlags = isMute
     ? ['-map', '0:v:0', '-an']
@@ -355,7 +388,6 @@ function getConversionArgs(
 
   // 4. Video to WebM
   if (to === '.webm') {
-    // libvpx-vp9 in 32-bit WebAssembly fails frame buffer allocation; use stable libvpx
     const vCodec = 'libvpx';
     if (userVideoCodec === 'copy') return ['-c:v', 'copy', ...videoAudioFlags];
     return [
@@ -363,7 +395,8 @@ function getConversionArgs(
       '-deadline', 'realtime',
       '-cpu-used', '8',
       '-threads', String(profile.encoderThreads),
-      '-b:v', '2M',
+      ...(effectiveVideoBitrate ? videoBitrateArgs : ['-b:v', '2M']),
+      ...colorSpaceArgs,
       ...videoFpsArgs,
       ...videoScaleFilter,
       ...videoAudioFlags,
@@ -376,7 +409,10 @@ function getConversionArgs(
       || videoFpsArgs.length > 0
       || (userVideoCodec && userVideoCodec !== 'copy' && userVideoCodec !== 'auto')
       || (userAudioCodec && userAudioCodec !== 'auto')
-      || isAudioCategoryActive || isMergeActive;
+      || isAudioCategoryActive || isMergeActive
+      || videoBitrateArgs.length > 0
+      || colorSpaceArgs.length > 0
+      || hasCustomPixFmt;
     if (!hasModifications) {
       return ['-c', 'copy'];
     }
@@ -388,7 +424,9 @@ function getConversionArgs(
     return [
       ...encMtFlags,
       '-c:v', vCodec,
-      ...(vCodec === 'libx264' ? getLibx264Args() : []),
+      ...(vCodec === 'libx264' ? getLibx264Args() : generalPixFmtArgs),
+      ...videoBitrateArgs,
+      ...colorSpaceArgs,
       ...videoFpsArgs,
       ...videoScaleFilter,
       ...videoAudioFlags,
@@ -403,7 +441,9 @@ function getConversionArgs(
     return [
       ...encMtFlags,
       '-c:v', vCodec,
-      ...(vCodec === 'libx264' ? getLibx264Args() : []),
+      ...(vCodec === 'libx264' ? getLibx264Args() : generalPixFmtArgs),
+      ...videoBitrateArgs,
+      ...colorSpaceArgs,
       ...videoFpsArgs,
       ...videoScaleFilter,
       ...videoAudioFlags,
@@ -418,8 +458,10 @@ function getConversionArgs(
     return [
       ...encMtFlags,
       '-c:v', vCodec,
-      ...(vCodec === 'libx264' ? getLibx264Args() : []),
+      ...(vCodec === 'libx264' ? getLibx264Args() : generalPixFmtArgs),
       '-movflags', '+faststart',
+      ...videoBitrateArgs,
+      ...colorSpaceArgs,
       ...videoFpsArgs,
       ...videoScaleFilter,
       ...videoAudioFlags,
@@ -434,7 +476,9 @@ function getConversionArgs(
     return [
       ...encMtFlags,
       '-c:v', vCodec,
-      ...(vCodec === 'libx264' ? getLibx264Args() : []),
+      ...(vCodec === 'libx264' ? getLibx264Args() : generalPixFmtArgs),
+      ...videoBitrateArgs,
+      ...colorSpaceArgs,
       ...videoFpsArgs,
       ...videoScaleFilter,
       ...videoAudioFlags,
@@ -446,6 +490,8 @@ function getConversionArgs(
     return [
       ...encMtFlags,
       '-c:v', 'wmv2',
+      ...videoBitrateArgs,
+      ...colorSpaceArgs,
       ...videoFpsArgs,
       ...videoScaleFilter,
       ...videoAudioFlags,
@@ -468,7 +514,9 @@ function getConversionArgs(
     return [
       ...encMtFlags,
       '-c:v', vCodec,
-      ...(vCodec === 'libx264' ? getLibx264Args() : []),
+      ...(vCodec === 'libx264' ? getLibx264Args() : generalPixFmtArgs),
+      ...videoBitrateArgs,
+      ...colorSpaceArgs,
       ...scale,
       ...fps,
       ...videoAudioFlags,
@@ -483,6 +531,8 @@ function getConversionArgs(
       '-c:v', vCodec,
       ...(vCodec === 'libx264' ? getLibx264Args() : ['-preset', 'ultrafast']),
       '-f', 'mpegts',
+      ...videoBitrateArgs,
+      ...colorSpaceArgs,
       ...videoFpsArgs,
       ...videoScaleFilter,
       ...videoAudioFlags,
@@ -494,6 +544,8 @@ function getConversionArgs(
     return [
       ...encMtFlags,
       '-c:v', 'mpeg2video',
+      ...videoBitrateArgs,
+      ...colorSpaceArgs,
       ...videoFpsArgs,
       ...videoScaleFilter,
       ...videoAudioFlags,
@@ -505,7 +557,9 @@ function getConversionArgs(
     return [
       '-threads', '1',
       '-c:v', 'libtheora',
-      '-pix_fmt', 'yuv420p',
+      '-pix_fmt', pixFmt,
+      ...videoBitrateArgs,
+      ...colorSpaceArgs,
       ...videoFpsArgs,
       ...videoScaleFilter,
       ...videoAudioFlags,
@@ -521,12 +575,79 @@ function getConversionArgs(
   return [
     ...encMtFlags,
     '-c:v', vCodec,
-    ...(vCodec === 'libx264' ? getLibx264Args() : []),
+    ...(vCodec === 'libx264' ? getLibx264Args() : generalPixFmtArgs),
     '-movflags', '+faststart',
+    ...videoBitrateArgs,
+    ...colorSpaceArgs,
     ...videoFpsArgs,
     ...videoScaleFilter,
     ...videoAudioFlags,
   ];
+}
+
+function getPixelFormatAndBitDepth(options?: ConversionModifiers): {
+  pixFmt: string;
+  profileArgs: string[];
+  isCustom: boolean;
+} {
+  const isPixFmtActive = options?.activeCategories?.includes('pixel_format');
+  const isBitDepthActive = options?.activeCategories?.includes('bit_depth');
+
+  const rawPixFmt = isPixFmtActive && options?.pixelFormat && options.pixelFormat !== 'auto'
+    ? options.pixelFormat
+    : 'yuv420p';
+  const rawBitDepth = isBitDepthActive && options?.bitDepth && options.bitDepth !== 'auto'
+    ? options.bitDepth
+    : '8bit';
+
+  let chosenFmt = rawPixFmt;
+  if (rawBitDepth === '10bit') {
+    if (chosenFmt === 'yuv420p') chosenFmt = 'yuv420p10le';
+    else if (chosenFmt === 'yuv422p') chosenFmt = 'yuv422p10le';
+    else if (chosenFmt === 'yuv444p') chosenFmt = 'yuv444p10le';
+    else if (chosenFmt === 'gray') chosenFmt = 'gray10le';
+  } else if (rawBitDepth === '12bit') {
+    if (chosenFmt === 'yuv420p') chosenFmt = 'yuv420p12le';
+    else if (chosenFmt === 'yuv422p') chosenFmt = 'yuv422p12le';
+    else if (chosenFmt === 'yuv444p') chosenFmt = 'yuv444p12le';
+    else if (chosenFmt === 'gray') chosenFmt = 'gray12le';
+  }
+
+  const profileArgs: string[] = [];
+  if (rawBitDepth === '10bit') {
+    profileArgs.push('-profile:v', 'high10');
+  }
+
+  const isCustom = Boolean(
+    (isPixFmtActive && options?.pixelFormat && options.pixelFormat !== 'auto') ||
+    (isBitDepthActive && options?.bitDepth && options.bitDepth !== 'auto')
+  );
+
+  return {
+    pixFmt: chosenFmt,
+    profileArgs,
+    isCustom,
+  };
+}
+
+function getColorSpaceArgs(options?: ConversionModifiers): string[] {
+  if (!options?.activeCategories?.includes('color_space') || !options.colorSpace || options.colorSpace === 'auto') {
+    return [];
+  }
+  switch (options.colorSpace) {
+    case 'bt709':
+      return ['-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709'];
+    case 'bt2020':
+      return ['-colorspace', 'bt2020nc', '-color_primaries', 'bt2020', '-color_trc', 'arib-std-b67'];
+    case 'smpte170m':
+      return ['-colorspace', 'smpte170m', '-color_primaries', 'smpte170m', '-color_trc', 'smpte170m'];
+    case 'bt470bg':
+      return ['-colorspace', 'bt470bg', '-color_primaries', 'bt470bg', '-color_trc', 'bt470bg'];
+    case 'srgb':
+      return ['-colorspace', 'iec61966-2-1', '-color_primaries', 'bt709', '-color_trc', 'iec61966-2-1'];
+    default:
+      return [];
+  }
 }
 
 function getMimeType(ext: string): string {
@@ -580,6 +701,10 @@ export const FFmpegMTModule: IModule = {
       'audio_merge',
       'subtitles',
       'video_duration',
+      'pixel_format',
+      'bit_depth',
+      'bitrate',
+      'color_space',
     ],
     supportedConversions: [
       {

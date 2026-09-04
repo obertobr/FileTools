@@ -13,7 +13,7 @@ describe('Media Probe & Container Support', () => {
   const fixturesDir = path.resolve(process.cwd(), 'tests/fixtures');
 
   it('probes real MKV video (1080p, 30fps) with native dimensions and framerate', () => {
-    const filePath = path.join(fixturesDir, '2025-03-31 23-44-55.mkv');
+    const filePath = path.join(fixturesDir, 'sample.mkv');
     const buf = fs.readFileSync(filePath);
     const result = probeMediaData(new Uint8Array(buf));
 

@@ -17,7 +17,11 @@ export type ModifierCategoryId =
   | 'quality'
   | 'video_codec'
   | 'audio_codec'
-  | 'video_duration';
+  | 'video_duration'
+  | 'pixel_format'
+  | 'bit_depth'
+  | 'bitrate'
+  | 'color_space';
 
 export type QualityPreset = 'original' | 'balanced' | 'compressed' | 'custom';
 
@@ -44,6 +48,29 @@ export type AudioCodecChoice =
   | 'pcm'
   | 'ac3'
   | 'copy';
+
+export type PixelFormatChoice =
+  | 'auto'
+  | 'yuv420p'
+  | 'yuv422p'
+  | 'yuv444p'
+  | 'yuv420p10le'
+  | 'rgb24'
+  | 'gray';
+
+export type BitDepthChoice =
+  | 'auto'
+  | '8bit'
+  | '10bit'
+  | '12bit';
+
+export type ColorSpaceChoice =
+  | 'auto'
+  | 'bt709'
+  | 'bt2020'
+  | 'smpte170m'
+  | 'bt470bg'
+  | 'srgb';
 
 export interface ConversionModifiers {
   // Stack of active modifier categories
@@ -79,12 +106,33 @@ export interface ConversionModifiers {
   targetWidth?: number;
   targetHeight?: number;
   customScaleWidth?: number;
+  customScaleHeight?: number;
+  isCustomResolutionProportional?: boolean;
   isCustomResolution?: boolean;
   gifScaleWidth?: number;
 
   // Codecs
   videoCodec?: VideoCodecChoice;
   audioCodec?: AudioCodecChoice;
+  syncAllAudioCodecs?: boolean;
+  trackAudioCodecs?: Record<number, AudioCodecChoice>;
+
+  // Pixel Format
+  pixelFormat?: PixelFormatChoice;
+
+  // Bit Depth
+  bitDepth?: BitDepthChoice;
+
+  // Bitrate (Target / Max)
+  videoBitrate?: string;
+  customVideoBitrateKbps?: number;
+  isCustomVideoBitrate?: boolean;
+  audioBitrate?: string;
+  customAudioBitrateKbps?: number;
+  isCustomAudioBitrate?: boolean;
+
+  // Color Space
+  colorSpace?: ColorSpaceChoice;
 
   // Video Duration (for Image -> Video)
   videoDurationSeconds?: number;
@@ -104,6 +152,14 @@ export const DEFAULT_CONVERSION_MODIFIERS: ConversionModifiers = {
   resolutionScale: 'original',
   videoCodec: 'auto',
   audioCodec: 'auto',
+  pixelFormat: 'auto',
+  bitDepth: 'auto',
+  videoBitrate: 'auto',
+  audioBitrate: 'auto',
+  colorSpace: 'auto',
+  isCustomResolutionProportional: true,
+  syncAllAudioCodecs: true,
+  trackAudioCodecs: {},
   videoDurationSeconds: 10,
   gifFps: 12,
   gifScaleWidth: 480,

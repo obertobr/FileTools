@@ -24,6 +24,11 @@ import { SubtitlesCard } from './modifiers/SubtitlesCard';
 import { FpsCard } from './modifiers/FpsCard';
 import { ResolutionCard } from './modifiers/ResolutionCard';
 import { DurationCard } from './modifiers/DurationCard';
+import { AudioCodecCard } from './modifiers/AudioCodecCard';
+import { PixelFormatCard } from './modifiers/PixelFormatCard';
+import { BitDepthCard } from './modifiers/BitDepthCard';
+import { BitrateCard } from './modifiers/BitrateCard';
+import { ColorSpaceCard } from './modifiers/ColorSpaceCard';
 import { categoryOfExtension } from '@/lib/formats';
 import { AddModifierPicker } from './modifiers/AddModifierPicker';
 import {
@@ -249,6 +254,31 @@ export function ConversionModifiersPanel({
         customFps: undefined,
         isCustomFps: false,
       });
+    } else if (modId === 'pixel_format') {
+      update({
+        activeCategories: nextCategories,
+        pixelFormat: 'auto',
+      });
+    } else if (modId === 'bit_depth') {
+      update({
+        activeCategories: nextCategories,
+        bitDepth: 'auto',
+      });
+    } else if (modId === 'bitrate') {
+      update({
+        activeCategories: nextCategories,
+        videoBitrate: 'auto',
+        customVideoBitrateKbps: undefined,
+        isCustomVideoBitrate: false,
+        audioBitrate: 'auto',
+        customAudioBitrateKbps: undefined,
+        isCustomAudioBitrate: false,
+      });
+    } else if (modId === 'color_space') {
+      update({
+        activeCategories: nextCategories,
+        colorSpace: 'auto',
+      });
     } else {
       update({ activeCategories: nextCategories });
     }
@@ -259,7 +289,7 @@ export function ConversionModifiersPanel({
   }
 
   return (
-    <div className="space-y-3 pt-1">
+    <div aria-label="Pilha de Modificadores" className="space-y-3 pt-1">
       {/* Barra de Ação Superior: Pilha de Modificadores */}
       <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg border border-border bg-surface-raised/40">
         <div className="flex items-center gap-2 min-w-0">
@@ -561,38 +591,45 @@ export function ConversionModifiersPanel({
 
                   {/* MODIFICADOR: CODEC DE ÁUDIO */}
                   {modId === 'audio_codec' && (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Typography variant="caption" color="muted">
-                          Codificador de áudio para {target.toUpperCase()}:
-                        </Typography>
-                        <span className="text-[11px] font-mono text-primary font-medium">
-                          {availableAudioCodecs.find((c) => c.id === currentModifiers.audioCodec)?.label || 'Automático'}
-                        </span>
-                      </div>
+                    <AudioCodecCard
+                      options={currentModifiers}
+                      onChange={update}
+                      targetFormat={targetFormat}
+                      probedMedia={probedMedia}
+                    />
+                  )}
 
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                        {availableAudioCodecs.map((codec) => {
-                          const isSelected = (currentModifiers.audioCodec || 'auto') === codec.id;
-                          return (
-                            <button
-                              key={codec.id}
-                              type="button"
-                              onClick={() => update({ audioCodec: codec.id as AudioCodecChoice })}
-                              className={cn(
-                                'p-2 text-left rounded-md border transition-colors select-none',
-                                isSelected
-                                  ? 'border-primary bg-primary/10 text-foreground font-medium'
-                                  : 'border-border bg-surface-raised text-muted-foreground hover:text-foreground'
-                              )}
-                            >
-                              <div className="text-[11px] font-medium text-foreground">{codec.label}</div>
-                              <div className="text-[10px] text-muted-foreground mt-0.5">{codec.desc}</div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                  {/* MODIFICADOR: FORMATO DE PIXEL */}
+                  {modId === 'pixel_format' && (
+                    <PixelFormatCard
+                      options={currentModifiers}
+                      onChange={update}
+                    />
+                  )}
+
+                  {/* MODIFICADOR: PROFUNDIDADE DE COR */}
+                  {modId === 'bit_depth' && (
+                    <BitDepthCard
+                      options={currentModifiers}
+                      onChange={update}
+                    />
+                  )}
+
+                  {/* MODIFICADOR: TAXA DE BITS (BITRATE) */}
+                  {modId === 'bitrate' && (
+                    <BitrateCard
+                      options={currentModifiers}
+                      onChange={update}
+                      targetFormat={targetFormat}
+                    />
+                  )}
+
+                  {/* MODIFICADOR: ESPAÇO DE COR */}
+                  {modId === 'color_space' && (
+                    <ColorSpaceCard
+                      options={currentModifiers}
+                      onChange={update}
+                    />
                   )}
 
                   {/* MODIFICADOR: NÚCLEOS / THREADS DE PROCESSAMENTO */}
