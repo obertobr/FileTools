@@ -22,13 +22,21 @@ let currentSpeed = '';
 
 export function resetFFmpegMT(): void {
   if (ffmpegMtInstance) {
+    const oldInstance = ffmpegMtInstance;
+    ffmpegMtInstance = null;
+    ffmpegMtLoaded = false;
     try {
-      ffmpegMtInstance.terminate();
+      // Non-blocking fire-and-forget termination to prevent deadlock on pthread Atomics.wait
+      setTimeout(() => {
+        try {
+          oldInstance.terminate();
+        } catch (_e) {
+          /* noop */
+        }
+      }, 0);
     } catch (_e) {
       /* noop */
     }
-    ffmpegMtInstance = null;
-    ffmpegMtLoaded = false;
   }
 }
 
@@ -51,6 +59,10 @@ function parseCurrentTimeSeconds(message: string): number | null {
   const cs = parseInt(timeMatch[4], 10);
   return h * 3600 + m * 60 + s + cs / 100;
 }
+
+let cachedCoreURL: string | null = null;
+let cachedWasmURL: string | null = null;
+let cachedWorkerURL: string | null = null;
 
 async function getFFmpegMT(context: ExecutionContext): Promise<FFmpeg> {
   currentContext = context;
@@ -93,11 +105,21 @@ async function getFFmpegMT(context: ExecutionContext): Promise<FFmpeg> {
   context.onProgress(0, 'Carregando motor FFmpeg Multi-Thread...');
 
   const origin = typeof self !== 'undefined' && self.location ? self.location.origin : '';
-  const coreURL = await toBlobURL(`${origin}/ffmpeg-core-mt/ffmpeg-core.js`, 'text/javascript');
-  const wasmURL = await toBlobURL(`${origin}/ffmpeg-core-mt/ffmpeg-core.wasm`, 'application/wasm');
-  const workerURL = await toBlobURL(`${origin}/ffmpeg-core-mt/ffmpeg-core.worker.js`, 'text/javascript');
+  if (!cachedCoreURL) {
+    cachedCoreURL = await toBlobURL(`${origin}/ffmpeg-core-mt/ffmpeg-core.js`, 'text/javascript');
+  }
+  if (!cachedWasmURL) {
+    cachedWasmURL = await toBlobURL(`${origin}/ffmpeg-core-mt/ffmpeg-core.wasm`, 'application/wasm');
+  }
+  if (!cachedWorkerURL) {
+    cachedWorkerURL = await toBlobURL(`${origin}/ffmpeg-core-mt/ffmpeg-core.worker.js`, 'text/javascript');
+  }
 
-  await ffmpegMtInstance.load({ coreURL, wasmURL, workerURL });
+  await ffmpegMtInstance.load({
+    coreURL: cachedCoreURL,
+    wasmURL: cachedWasmURL,
+    workerURL: cachedWorkerURL,
+  });
 
   ffmpegMtLoaded = true;
   return ffmpegMtInstance;
@@ -328,8 +350,8 @@ function getConversionArgs(
 
   // 4. Video to WebM
   if (to === '.webm') {
-    let vCodec = 'libvpx';
-    if (userVideoCodec === 'vp9') vCodec = 'libvpx-vp9';
+    // libvpx-vp9 in 32-bit WebAssembly fails frame buffer allocation; use stable libvpx
+    const vCodec = 'libvpx';
     if (userVideoCodec === 'copy') return ['-c:v', 'copy', ...videoAudioFlags];
     return [
       '-c:v', vCodec,
@@ -417,19 +439,24 @@ function getConversionArgs(
     return [
       ...encMtFlags,
       '-c:v', 'wmv2',
-      '-c:a', 'wmav2',
       ...videoFpsArgs,
       ...videoScaleFilter,
+      ...videoAudioFlags,
     ];
   }
 
   // 10. Video to 3GP
   if (to === '.3gp') {
+    const isCustomScale = videoScaleFilter.length > 0;
+    // H.263 only supports standard QCIF/CIF resolutions. Use MPEG-4 when custom resolution is requested.
+    const vCodec = isCustomScale ? 'mpeg4' : 'h263';
+    const scale = isCustomScale ? videoScaleFilter : ['-s', '176x144'];
+    const fps = videoFpsArgs.length > 0 ? videoFpsArgs : ['-r', '15'];
     return [
       ...encMtFlags,
-      '-c:v', 'h263',
-      '-s', '176x144',
-      '-r', '15',
+      '-c:v', vCodec,
+      ...scale,
+      ...fps,
       ...videoAudioFlags,
     ];
   }
@@ -452,21 +479,21 @@ function getConversionArgs(
     return [
       ...encMtFlags,
       '-c:v', 'mpeg2video',
-      '-c:a', 'mp2',
       ...videoFpsArgs,
       ...videoScaleFilter,
+      ...videoAudioFlags,
     ];
   }
 
   // 13. Video to OGV
   if (to === '.ogv') {
     return [
-      ...encMtFlags,
+      '-threads', '1',
       '-c:v', 'libtheora',
       '-pix_fmt', 'yuv420p',
-      '-c:a', 'libvorbis',
       ...videoFpsArgs,
       ...videoScaleFilter,
+      ...videoAudioFlags,
     ];
   }
 
@@ -673,7 +700,39 @@ export const FFmpegMTModule: IModule = {
       context.onLog(`[FFmpeg MT] Executando: ffmpeg ${fullArgs.join(' ')}`);
       context.onProgress(0, 'Iniciando processamento...');
 
-      const exitCode = await ffmpeg.exec(fullArgs);
+      let abortError: Error | null = null;
+      let checkInterval: any;
+      let timer: any;
+
+      const logListener = ({ message }: { message: string }) => {
+        if (message.includes('Aborted()') || message.includes('abort(')) {
+          abortError = new Error(`FFmpeg MT abortou: ${message}`);
+        }
+      };
+      ffmpeg.on('log', logListener);
+
+      const timeoutPromise = new Promise<number>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error('Tempo limite excedido na execução do FFmpeg MT (timeout).'));
+        }, 25_000);
+      });
+
+      const abortPromise = new Promise<number>((_, reject) => {
+        checkInterval = setInterval(() => {
+          if (abortError) {
+            clearInterval(checkInterval);
+            reject(abortError);
+          }
+        }, 50);
+      });
+
+      let exitCode: number;
+      try {
+        exitCode = await Promise.race([ffmpeg.exec(fullArgs), timeoutPromise, abortPromise]);
+      } finally {
+        clearTimeout(timer);
+        clearInterval(checkInterval);
+      }
 
       if (exitCode !== 0) {
         throw new Error(`FFmpeg MT finalizou com código de erro ${exitCode}. Verifique os logs para detalhes.`);
@@ -696,8 +755,10 @@ export const FFmpegMTModule: IModule = {
         mimeType: getMimeType(outputExt),
       };
     } catch (runErr: any) {
-      resetFFmpegMT();
       const message = runErr instanceof Error ? (runErr.stack || runErr.message) : String(runErr);
+      if (message.includes('memory') || message.includes('abort') || message.includes('Aborted')) {
+        resetFFmpegMT();
+      }
       if (message.includes('memory access out of bounds')) {
         throw new Error(
           'O arquivo é muito grande ou exigiu mais memória que o limite WebAssembly de 32 bits (2 GB). Para converter para MP4 use o motor "Remux Direto (Cópia Sem Perdas)" que é instantâneo e não consome memória.'
@@ -705,15 +766,17 @@ export const FFmpegMTModule: IModule = {
       }
       throw runErr;
     } finally {
-      try {
-        await ffmpeg.deleteFile(inputPath);
-      } catch (_e) {
-        /* noop */
-      }
-      try {
-        await ffmpeg.deleteFile(outputPath);
-      } catch (_e) {
-        /* noop */
+      if (ffmpeg) {
+        try {
+          await ffmpeg.deleteFile(inputPath);
+        } catch (_e) {
+          /* noop */
+        }
+        try {
+          await ffmpeg.deleteFile(outputPath);
+        } catch (_e) {
+          /* noop */
+        }
       }
       currentContext = null;
     }

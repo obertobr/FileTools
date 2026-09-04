@@ -16,7 +16,8 @@
     "test:module": "node scripts/test-module.js",
     "test:modules": "node scripts/test-module.js all",
     "typecheck": "astro check",
-    "postinstall": "node -e \"const fs = require('fs'); fs.cpSync('node_modules/@ffmpeg/core/dist/esm', 'public', {recursive: true}); fs.cpSync('node_modules/@ffmpeg/core-mt/dist/esm', 'public/ffmpeg-core-mt', {recursive: true});\""
+    "postinstall": "node -e \"const fs = require('fs'); fs.cpSync('node_modules/@ffmpeg/core/dist/esm', 'public', {recursive: true}); fs.cpSync('node_modules/@ffmpeg/core-mt/dist/esm', 'public/ffmpeg-core-mt', {recursive: true});\"",
+    "test:conversion": "npx tsx scripts/test-conversion.ts"
   },
   "dependencies": {
     "@astrojs/react": "^4.4.2",
@@ -54,4 +55,3 @@
     "vitest": "^2.1.0"
   }
 }
-

@@ -348,3 +348,33 @@ Se **qualquer** etapa falhar, o código NÃO deve ser merged/deployed.
 ### Quando adicionar um novo formato:
 1. ✅ Teste de resolução no `registry.test.ts`
 2. ✅ Verificar build SSG (`npm run build`)
+
+---
+
+## Camada 4: Teste de Conversões com Delta Debugging e Escopo Direcionado (`npm run test:conversion`)
+
+O FileTools possui um sistema automatizado de testes de conversão com **Delta Debugging (DDmin)** e **Escopo Direcionado (Targeted Testing)** implementado em `src/core/testing/deltaDebugger.ts` e executado via CLI com `scripts/test-conversion.ts`.
+
+### Por que usar Delta Debugging?
+Em conversões de mídia com múltiplos modificadores (resolução, taxa de quadros, codecs de áudio/vídeo, mesclagem de faixas, threads, etc.), testar todas as centenas de permutações combinatórias é proibitivamente demorado. O algoritmo DDmin resolve isso de maneira cirúrgica:
+
+1. **Fast-Path (Pilha Máxima $C_{max}$)**: Aplica todos os modificadores aplicáveis suportados pelo motor de uma vez só. Se passar, a conversão é aprovada em 1 ciclo (~1s).
+2. **Sanity Baseline ($C = \emptyset$)**: Se a pilha máxima falhar, testa sem nenhum modificador. Se falhar, acusa imediatamente `FAIL_BASELINE` (incompatibilidade estrutural do contêiner).
+3. **Isolamento Singleton ($|C| = 1$)**: Se o baseline passar, testa cada modificador isolado para detectar modificadores individualmente quebrados (`FAIL_SINGLETON`).
+4. **Bissecção Binária DDmin**: Se nenhum modificador falhar sozinho, divide o conjunto em partições e complementos sucessivos até isolar o subconjunto mínimo de interação (`FAIL_INTERACTION`).
+
+### Comandos de Teste Direcionado
+
+```bash
+# Testar exatamente a conversão em que você está mexendo (em segundos)
+npx tsx scripts/test-conversion.ts --from=mkv --to=webm
+
+# Testar todas as conversões de uma extensão de origem em um motor específico
+npx tsx scripts/test-conversion.ts --from=mkv --engine=ffmpeg-core-mt
+
+# Testar com arquivo de teste customizado
+npx tsx scripts/test-conversion.ts --from=mkv --to=mp4 --file=tests/fixtures/2025-03-31\ 23-44-55.mkv
+
+# Via script npm configurado
+npm run test:conversion -- --from=mkv --to=webm
+```

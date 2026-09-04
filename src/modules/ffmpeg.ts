@@ -315,8 +315,8 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
 
   // 4. Video to WebM
   if (to === '.webm') {
-    let vCodec = 'libvpx';
-    if (userVideoCodec === 'vp9') vCodec = 'libvpx-vp9';
+    // libvpx-vp9 in 32-bit WebAssembly fails frame buffer allocation; use stable libvpx
+    const vCodec = 'libvpx';
     if (userVideoCodec === 'copy') return ['-c:v', 'copy', ...videoAudioFlags];
     return ['-c:v', vCodec, '-b:v', '1.5M', ...videoFpsArgs, ...videoScaleFilter, ...videoAudioFlags];
   }
@@ -382,7 +382,11 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
 
   // 10. Video to 3GP
   if (to === '.3gp') {
-    return ['-c:v', 'h263', '-s', '176x144', '-r', '15', ...videoAudioFlags];
+    const isCustomScale = videoScaleFilter.length > 0;
+    const vCodec = isCustomScale ? 'mpeg4' : 'h263';
+    const scale = isCustomScale ? videoScaleFilter : ['-s', '176x144'];
+    const fps = videoFpsArgs.length > 0 ? videoFpsArgs : ['-r', '15'];
+    return ['-c:v', vCodec, ...scale, ...fps, ...videoAudioFlags];
   }
 
   // 11. Video to TS

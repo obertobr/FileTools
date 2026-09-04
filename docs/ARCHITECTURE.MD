@@ -200,3 +200,31 @@ O sistema de opções avançadas (Pilha de Modificadores (Modifier Stack)) obede
 2. **Prevenção de Execução Silenciosa Falha**: Caso o motor atual não suporte aplicar as alterações solicitadas, a conversão é bloqueada na UI com indicação clara do motivo e botão de alternância imediata para o motor transcodificador compatível.
 3. **Extração e Fidelidade de Metadados**: O probe binário nativo (`src/core/media/mediaProbe.ts`) garante que framerate e dimensões sejam populados a partir do arquivo real do usuário, eliminando defaults arbitrários.
 
+
+
+---
+
+## 14. Sistema de Teste de Conversões com Delta Debugging (DDmin)
+
+Para garantir cobertura total das centenas de pares de conversão sem incorrer em execuções de dezenas de horas, o FileTools adota o algoritmo **Delta Debugging (DDmin)** com **Escopo Direcionado**:
+
+1. **Localização**:
+   - Motor DDmin: [`src/core/testing/deltaDebugger.ts`](../src/core/testing/deltaDebugger.ts)
+   - Testes Unitários: [`src/core/testing/deltaDebugger.test.ts`](../src/core/testing/deltaDebugger.test.ts)
+   - CLI Runner: [`scripts/test-conversion.ts`](../scripts/test-conversion.ts)
+   - Teste E2E Playwright: [`e2e/test-delta-debugging.spec.ts`](../e2e/test-delta-debugging.spec.ts)
+   - Protocolo Normativo: [`docs/protocols/delta-debugging.md`](./protocols/delta-debugging.md)
+
+2. **Fluxo Operacional**:
+   - **Fast-Path ($C_{max}$)**: Aplica todos os modificadores válidos suportados pelo motor. Se passar, o teste termina em 1 ciclo (~1s).
+   - **Baseline ($C = \emptyset$)**: Se $C_{max}$ falhar, avalia se a conversão básica é suportada pelo motor.
+   - **Singleton ($|C| = 1$)**: Se o baseline passar, testa modificadores individualmente.
+   - **Bissecção Binária**: Bissecção recursiva de partições e complementos até isolar o subconjunto conflitante mínimo.
+
+3. **Comando para Desenvolvedores**:
+   ```bash
+   # Testar conversão específica em segundos
+   npx tsx scripts/test-conversion.ts --from=mkv --to=webm
+   # ou via npm
+   npm run test:conversion -- --from=mkv --to=webm
+   ```
