@@ -9,19 +9,38 @@ export interface ResolutionCardProps {
   onChange: (updated: Partial<ConversionModifiers>) => void;
   isGif?: boolean;
   probedMedia?: MediaProbeResult;
+  targetFormat?: string;
+  videoCodec?: string;
 }
 
-export function ResolutionCard({ options, onChange, isGif, probedMedia }: ResolutionCardProps) {
+export function ResolutionCard({
+  options,
+  onChange,
+  isGif,
+  probedMedia,
+  targetFormat,
+  videoCodec,
+}: ResolutionCardProps) {
+  const currentTarget = (targetFormat || '').toLowerCase().replace(/^\.+/, '');
+  const activeCodec = videoCodec || options.videoCodec || 'auto';
+  const is3GPH263 = (currentTarget === '3gp' && (activeCodec === 'h263' || activeCodec === 'auto')) || activeCodec === 'h263';
+
   const currentScale = options.customScaleWidth !== undefined
     ? options.customScaleWidth
     : options.resolutionScale;
-  const isCustomScale = Boolean(options.isCustomResolution);
+  const isCustomScale = Boolean(options.isCustomResolution) && !is3GPH263;
 
   const nativeWidth = probedMedia?.width || options.probedMedia?.width;
   const nativeHeight = probedMedia?.height || options.probedMedia?.height;
   const nativeDimensionStr = nativeWidth && nativeHeight ? `${nativeWidth}x${nativeHeight}` : '';
 
-  const presets: { id: ResolutionScale; label: string; desc: string; width: number }[] = isGif
+  const presets: { id: ResolutionScale; label: string; desc: string; width: number }[] = is3GPH263
+    ? [
+        { id: 'cif', label: 'CIF', desc: 'Padrão (352x288)', width: 352 },
+        { id: 'qcif', label: 'QCIF', desc: 'Clássico (176x144)', width: 176 },
+        { id: 'sub-qcif', label: 'sub-QCIF', desc: 'Ultra-leve (128x96)', width: 128 },
+      ]
+    : isGif
     ? [
         { id: '320p', label: '320p', desc: 'Leve (320px)', width: 320 },
         { id: '480p', label: '480p', desc: 'Padrão (480px)', width: 480 },
@@ -51,9 +70,9 @@ export function ResolutionCard({ options, onChange, isGif, probedMedia }: Resolu
         </span>
       </div>
 
-      <div className={cn('grid gap-1.5', isGif ? 'grid-cols-5' : 'grid-cols-6')}>
+      <div className={cn('grid gap-1.5', is3GPH263 ? 'grid-cols-3' : (isGif ? 'grid-cols-5' : 'grid-cols-6'))}>
         {presets.map((preset) => {
-          const isSelected = !isCustomScale && (options.resolutionScale || 'original') === preset.id;
+          const isSelected = !isCustomScale && (options.resolutionScale || (is3GPH263 ? 'qcif' : 'original')) === preset.id;
           return (
             <button
               key={preset.id}
@@ -79,27 +98,35 @@ export function ResolutionCard({ options, onChange, isGif, probedMedia }: Resolu
           );
         })}
 
-        <button
-          type="button"
-          onClick={() =>
-            onChange({
-              resolutionScale: 'custom',
-              isCustomResolution: true,
-              customScaleWidth: options.customScaleWidth || (isGif ? 480 : (nativeWidth || 1280)),
-              gifScaleWidth: options.customScaleWidth || (isGif ? 480 : (nativeWidth || 1280)),
-            })
-          }
-          className={cn(
-            'p-2 text-left rounded-md border transition-colors select-none',
-            isCustomScale
-              ? 'border-primary bg-primary/10 text-foreground font-medium'
-              : 'border-border bg-surface-raised text-muted-foreground hover:text-foreground'
-          )}
-        >
-          <div className="text-[11px] font-medium text-foreground">Custom</div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">Definir px</div>
-        </button>
+        {!is3GPH263 && (
+          <button
+            type="button"
+            onClick={() =>
+              onChange({
+                resolutionScale: 'custom',
+                isCustomResolution: true,
+                customScaleWidth: options.customScaleWidth || (isGif ? 480 : (nativeWidth || 1280)),
+                gifScaleWidth: options.customScaleWidth || (isGif ? 480 : (nativeWidth || 1280)),
+              })
+            }
+            className={cn(
+              'p-2 text-left rounded-md border transition-colors select-none',
+              isCustomScale
+                ? 'border-primary bg-primary/10 text-foreground font-medium'
+                : 'border-border bg-surface-raised text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <div className="text-[11px] font-medium text-foreground">Custom</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">Definir px</div>
+          </button>
+        )}
       </div>
+
+      {is3GPH263 && (
+        <div className="rounded-md border border-primary/20 bg-primary/5 p-2 text-[11px] text-muted-foreground">
+          💡 <strong className="text-foreground">Sintonia de Codec:</strong> O codec legado <strong>H.263</strong> aceita estritamente resoluções padronizadas CIF, QCIF e sub-QCIF. Para resoluções HD (720p/1080p) ou customizadas, selecione o codec <strong>MPEG-4</strong> no modificador de Codec de Vídeo.
+        </div>
+      )}
 
       {isCustomScale && (
         <div className="flex items-center gap-2 pt-1">

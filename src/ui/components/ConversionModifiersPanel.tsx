@@ -79,6 +79,7 @@ export function ConversionModifiersPanel({
       { id: 'vp8', label: 'VP8', desc: 'Padrão aberto WebM' },
       { id: 'vp9', label: 'VP9', desc: 'Alta definição WebM/MKV' },
       { id: 'mpeg4', label: 'MPEG-4', desc: 'Compatibilidade com AVI/legados' },
+      { id: 'h263', label: 'H.263', desc: 'Padrão 3GPP clássico (CIF/QCIF)' },
       { id: 'theora', label: 'Theora', desc: 'Codec livre para Ogg' },
       { id: 'copy', label: 'Cópia (Passthrough)', desc: 'Instantâneo sem perda' },
     ];
@@ -89,7 +90,8 @@ export function ConversionModifiersPanel({
     if (target === 'ts') return all.filter((c) => ['auto', 'h264', 'hevc', 'copy'].includes(c.id));
     if (target === 'flv') return all.filter((c) => ['auto', 'h264', 'copy'].includes(c.id));
     if (target === 'mpg' || target === 'mpeg' || target === 'vob') return all.filter((c) => ['auto', 'copy'].includes(c.id));
-    if (target === 'wmv' || target === '3gp') return all.filter((c) => ['auto', 'copy'].includes(c.id));
+    if (target === '3gp') return all.filter((c) => ['auto', 'h263', 'mpeg4', 'h264', 'copy'].includes(c.id));
+    if (target === 'wmv') return all.filter((c) => ['auto', 'copy'].includes(c.id));
     return all;
   }, [target]);
 
@@ -415,6 +417,8 @@ export function ConversionModifiersPanel({
                       onChange={update}
                       isGif={isGif}
                       probedMedia={probedMedia}
+                      targetFormat={target}
+                      videoCodec={currentModifiers.videoCodec}
                     />
                   )}
 

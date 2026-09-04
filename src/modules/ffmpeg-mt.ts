@@ -175,6 +175,15 @@ function getConversionArgs(
     ? String(options.customCrf)
     : (crfMap[options?.qualityPreset || 'original'] || '18');
 
+  // Optimal libx264 args for 32-bit WASM: uses slice-threading to avoid lookahead pthread deadlocks
+  // and guarantees universal yuv420p pixel format compatibility avoiding WASM SIMD signature errors.
+  const getLibx264Args = () => [
+    '-threads', '1',
+    '-preset', 'ultrafast',
+    '-crf', crfVal,
+    '-pix_fmt', 'yuv420p',
+  ];
+
   // Video resolution scale filter
   let videoScaleFilter: string[] = [];
   if (options?.activeCategories?.includes('resolution')) {
@@ -188,6 +197,12 @@ function getConversionArgs(
       videoScaleFilter = ['-vf', 'scale=854:-2'];
     } else if (options.resolutionScale === '320p') {
       videoScaleFilter = ['-vf', 'scale=480:-2'];
+    } else if (options.resolutionScale === 'cif') {
+      videoScaleFilter = ['-s', '352x288'];
+    } else if (options.resolutionScale === 'qcif') {
+      videoScaleFilter = ['-s', '176x144'];
+    } else if (options.resolutionScale === 'sub-qcif') {
+      videoScaleFilter = ['-s', '128x96'];
     }
   }
 
@@ -204,7 +219,7 @@ function getConversionArgs(
   const userVideoCodec = options?.activeCategories?.includes('video_codec') ? options.videoCodec : undefined;
   const userAudioCodec = options?.activeCategories?.includes('audio_codec') ? options.audioCodec : undefined;
 
-    const isImageToVideo = categoryOfExtension(from) === 'image' && (categoryOfExtension(to) === 'video' || to === '.gif');
+  const isImageToVideo = categoryOfExtension(from) === 'image' && (categoryOfExtension(to) === 'video' || to === '.gif');
   const isAudioToVideo = categoryOfExtension(from) === 'audio' && categoryOfExtension(to) === 'video';
 
   // Image to Video with custom duration
@@ -217,7 +232,7 @@ function getConversionArgs(
       '-c:v', vCodec,
       '-t', String(duration),
       '-pix_fmt', 'yuv420p',
-      ...(vCodec === 'libx264' ? ['-preset', 'ultrafast', '-crf', crfVal] : []),
+      ...(vCodec === 'libx264' ? getLibx264Args() : []),
       ...scaleFilter,
     ];
   }
@@ -237,7 +252,7 @@ function getConversionArgs(
       '-tune', 'stillimage',
       '-pix_fmt', 'yuv420p',
       '-shortest',
-      ...(vCodec === 'libx264' ? ['-preset', 'ultrafast', '-crf', crfVal] : []),
+      ...(vCodec === 'libx264' ? getLibx264Args() : []),
       ...videoScaleFilter,
       ...audioFlags,
     ];
@@ -383,7 +398,7 @@ function getConversionArgs(
     return [
       ...encMtFlags,
       '-c:v', vCodec,
-      ...(vCodec === 'libx264' ? ['-preset', 'ultrafast', '-crf', crfVal] : []),
+      ...(vCodec === 'libx264' ? getLibx264Args() : []),
       ...videoFpsArgs,
       ...videoScaleFilter,
       ...videoAudioFlags,
@@ -398,6 +413,7 @@ function getConversionArgs(
     return [
       ...encMtFlags,
       '-c:v', vCodec,
+      ...(vCodec === 'libx264' ? getLibx264Args() : []),
       ...videoFpsArgs,
       ...videoScaleFilter,
       ...videoAudioFlags,
@@ -412,7 +428,7 @@ function getConversionArgs(
     return [
       ...encMtFlags,
       '-c:v', vCodec,
-      ...(vCodec === 'libx264' ? ['-preset', 'ultrafast', '-crf', crfVal] : []),
+      ...(vCodec === 'libx264' ? getLibx264Args() : []),
       '-movflags', '+faststart',
       ...videoFpsArgs,
       ...videoScaleFilter,
@@ -428,6 +444,7 @@ function getConversionArgs(
     return [
       ...encMtFlags,
       '-c:v', vCodec,
+      ...(vCodec === 'libx264' ? getLibx264Args() : []),
       ...videoFpsArgs,
       ...videoScaleFilter,
       ...videoAudioFlags,
@@ -448,13 +465,20 @@ function getConversionArgs(
   // 10. Video to 3GP
   if (to === '.3gp') {
     const isCustomScale = videoScaleFilter.length > 0;
-    // H.263 only supports standard QCIF/CIF resolutions. Use MPEG-4 when custom resolution is requested.
-    const vCodec = isCustomScale ? 'mpeg4' : 'h263';
+    let vCodec = 'h263';
+    if (userVideoCodec && userVideoCodec !== 'auto') {
+      // Prioritize preserving user's explicit codec choice
+      vCodec = userVideoCodec === 'mpeg4' ? 'mpeg4' : (userVideoCodec === 'h264' ? 'libx264' : 'h263');
+    } else if (isCustomScale) {
+      // Automatic fallback to mpeg4 only when user hasn't explicitly chosen h263
+      vCodec = 'mpeg4';
+    }
     const scale = isCustomScale ? videoScaleFilter : ['-s', '176x144'];
     const fps = videoFpsArgs.length > 0 ? videoFpsArgs : ['-r', '15'];
     return [
       ...encMtFlags,
       '-c:v', vCodec,
+      ...(vCodec === 'libx264' ? getLibx264Args() : []),
       ...scale,
       ...fps,
       ...videoAudioFlags,
@@ -463,10 +487,11 @@ function getConversionArgs(
 
   // 11. Video to TS
   if (to === '.ts') {
+    const vCodec = userVideoCodec === 'hevc' ? 'libx265' : 'libx264';
     return [
       ...encMtFlags,
-      '-c:v', userVideoCodec === 'hevc' ? 'libx265' : 'libx264',
-      '-preset', 'ultrafast',
+      '-c:v', vCodec,
+      ...(vCodec === 'libx264' ? getLibx264Args() : ['-preset', 'ultrafast']),
       '-f', 'mpegts',
       ...videoFpsArgs,
       ...videoScaleFilter,
@@ -506,7 +531,7 @@ function getConversionArgs(
   return [
     ...encMtFlags,
     '-c:v', vCodec,
-    ...(vCodec === 'libx264' ? ['-preset', 'ultrafast', '-crf', crfVal] : []),
+    ...(vCodec === 'libx264' ? getLibx264Args() : []),
     '-movflags', '+faststart',
     ...videoFpsArgs,
     ...videoScaleFilter,
@@ -701,6 +726,8 @@ export const FFmpegMTModule: IModule = {
       context.onProgress(0, 'Iniciando processamento...');
 
       let abortError: Error | null = null;
+      let lastActivityTime = Date.now();
+      let startedEncoding = false;
       let checkInterval: any;
       let timer: any;
 
@@ -708,13 +735,24 @@ export const FFmpegMTModule: IModule = {
         if (message.includes('Aborted()') || message.includes('abort(')) {
           abortError = new Error(`FFmpeg MT abortou: ${message}`);
         }
+        if (message.includes('frame=') || message.includes('time=')) {
+          startedEncoding = true;
+          lastActivityTime = Date.now();
+        } else if (startedEncoding) {
+          // Any active log during container finalization/muxing updates the watchdog
+          lastActivityTime = Date.now();
+        }
+
+        if (message.includes('Starting second pass') || message.includes('moving the moov atom')) {
+          context.onProgress(99, 'Finalizando contêiner MP4 e organizando metadados (faststart)...');
+        }
       };
       ffmpeg.on('log', logListener);
 
       const timeoutPromise = new Promise<number>((_, reject) => {
         timer = setTimeout(() => {
-          reject(new Error('Tempo limite excedido na execução do FFmpeg MT (timeout).'));
-        }, 25_000);
+          reject(new Error('Tempo limite excedido na execução do FFmpeg MT (timeout total de 120s).'));
+        }, 120_000);
       });
 
       const abortPromise = new Promise<number>((_, reject) => {
@@ -722,14 +760,18 @@ export const FFmpegMTModule: IModule = {
           if (abortError) {
             clearInterval(checkInterval);
             reject(abortError);
+          } else if (startedEncoding && (Date.now() - lastActivityTime > 10_000)) {
+            clearInterval(checkInterval);
+            reject(new Error('FFmpeg MT congelou: estagnação de quadros detectada (nenhum avanço por 10 segundos).'));
           }
-        }, 50);
+        }, 200);
       });
 
       let exitCode: number;
       try {
         exitCode = await Promise.race([ffmpeg.exec(fullArgs), timeoutPromise, abortPromise]);
       } finally {
+        ffmpeg.off('log', logListener);
         clearTimeout(timer);
         clearInterval(checkInterval);
       }
@@ -738,7 +780,7 @@ export const FFmpegMTModule: IModule = {
         throw new Error(`FFmpeg MT finalizou com código de erro ${exitCode}. Verifique os logs para detalhes.`);
       }
 
-      context.onProgress(98, 'Lendo arquivo de saída gerado...');
+      context.onProgress(99, 'Lendo arquivo de saída gerado da memória...');
       const outputData = await ffmpeg.readFile(outputPath);
 
       if (typeof outputData === 'string') {

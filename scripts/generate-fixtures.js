@@ -1,4 +1,4 @@
-﻿import fs from 'fs';
+import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
@@ -30,15 +30,15 @@ function runFFmpeg(args, outputFile) {
   }
 }
 
-// 1. Ultra-compact Video Files (0.5s, 64x64 resolution, 10 fps)
+// 1. Ultra-compact Baseline Video Files (0.5s, 64x64 resolution, 10 fps)
 runFFmpeg(
   '-f lavfi -i testsrc=size=64x64:rate=10 -f lavfi -i sine=frequency=440:duration=0.5 -t 0.5 -c:v libx264 -preset ultrafast -c:a aac -b:a 64k',
-  'sample.mp4'
+  'sample_compact.mp4'
 );
 
 runFFmpeg(
   '-f lavfi -i testsrc=size=64x64:rate=10 -f lavfi -i sine=frequency=440:duration=0.5 -t 0.5 -c:v libx264 -preset ultrafast -c:a aac -b:a 64k',
-  'sample.mkv'
+  'sample.mp4'
 );
 
 runFFmpeg(
@@ -46,11 +46,24 @@ runFFmpeg(
   'sample.webm'
 );
 
-// 2. High-Resolution 1080p Video File (1.0s, 1920x1080, 30 fps, ~80 KB)
-// Validates 32-bit WASM memory allocation and macroblock partitioning without taking more than 2 seconds
+// 2. Realistic Multi-Track 1080p Video File (1.5s, 1920x1080, 30 fps, 3 faixas AAC separadas)
+// Replicates the exact architectural characteristics of screen capture software (OBS, Shadowplay):
+// 1080p resolution, multi-stream parallel AAC audio tracks, testing thread and memory stress.
 runFFmpeg(
-  '-f lavfi -i testsrc=size=1920x1080:rate=30 -f lavfi -i sine=frequency=440:duration=1 -t 1 -c:v libx264 -preset ultrafast -c:a aac -b:a 96k',
-  'sample_1080p.mkv'
+  '-f lavfi -i testsrc=size=1920x1080:rate=30 -f lavfi -i sine=frequency=440:duration=1.5 -f lavfi -i sine=frequency=880:duration=1.5 -f lavfi -i sine=frequency=1320:duration=1.5 -t 1.5 -map 0:v:0 -map 1:a:0 -map 2:a:0 -map 3:a:0 -metadata:s:a:0 title="TUDO" -metadata:s:a:1 title="MIC" -metadata:s:a:2 title="SISTEMA" -c:v libx264 -preset ultrafast -pix_fmt yuv420p -crf 18 -c:a aac -b:a 128k',
+  'sample.mkv'
+);
+
+runFFmpeg(
+  '-f lavfi -i testsrc=size=1920x1080:rate=30 -f lavfi -i sine=frequency=440:duration=1.5 -f lavfi -i sine=frequency=880:duration=1.5 -f lavfi -i sine=frequency=1320:duration=1.5 -t 1.5 -map 0:v:0 -map 1:a:0 -map 2:a:0 -map 3:a:0 -metadata:s:a:0 title="TUDO" -metadata:s:a:1 title="MIC" -metadata:s:a:2 title="SISTEMA" -c:v libx264 -preset ultrafast -pix_fmt yuv420p -crf 18 -c:a aac -b:a 128k',
+  'sample_multitrack_1080p.mkv'
+);
+
+// 3. Ultra-Heavy 4K Multi-Track Video File (1.0s, 3840x2160, 30 fps, 3 faixas AAC)
+// Stresses the maximum ceiling of 32-bit WebAssembly frame buffers and macroblock scheduling.
+runFFmpeg(
+  '-f lavfi -i testsrc=size=3840x2160:rate=30 -f lavfi -i sine=frequency=440:duration=1 -f lavfi -i sine=frequency=880:duration=1 -f lavfi -i sine=frequency=1320:duration=1 -t 1 -map 0:v:0 -map 1:a:0 -map 2:a:0 -map 3:a:0 -metadata:s:a:0 title="MASTER" -metadata:s:a:1 title="AUDIO1" -metadata:s:a:2 title="AUDIO2" -c:v libx264 -preset ultrafast -pix_fmt yuv420p -crf 20 -c:a aac -b:a 128k',
+  'sample_4k_multitrack.mkv'
 );
 
 // 3. Ultra-compact Audio Files (0.5s duration)

@@ -125,10 +125,19 @@ export function getApplicableModifierPool(
 
   // 3. Resolution and Scale
   if ((isVideoOutput || isGifOutput) && isSupported('resolution')) {
+    const is3GP = to === '3gp';
     pool.push({
       id: 'resolution',
-      description: isGifOutput ? 'Escala do GIF (largura 320px)' : 'Resolução 720p',
-      patch: isGifOutput ? { gifScaleWidth: 320 } : { resolutionScale: '720p' },
+      description: isGifOutput
+        ? 'Escala do GIF (largura 320px)'
+        : is3GP
+        ? 'Resolução CIF 3GPP (352x288)'
+        : 'Resolução 720p',
+      patch: isGifOutput
+        ? { gifScaleWidth: 320 }
+        : is3GP
+        ? { resolutionScale: 'cif' }
+        : { resolutionScale: '720p' },
     });
   }
 
@@ -212,7 +221,7 @@ export async function runDeltaDebugging(
   toExt: string,
   engineId: string,
   pool: ModifierPatch[],
-  executeConversion: (modifiers: ConversionModifiers) => Promise<{
+  executeConversion: (modifiers: ConversionModifiers, stageLabel?: string) => Promise<{
     success: boolean;
     error?: string;
     logs?: string[];
@@ -221,27 +230,8 @@ export async function runDeltaDebugging(
   const startTime = Date.now();
   let iterations = 0;
 
-  // 1. Stage 1: Maximal Modifiers Stress Test (Fast-path)
-  iterations++;
-  const maximalModifiers = combineModifierPatches(pool);
-  const maxRes = await executeConversion(maximalModifiers);
-
-  if (maxRes.success) {
-    return {
-      from: fromExt,
-      to: toExt,
-      engineId,
-      status: 'PASS',
-      iterations,
-      maximalPassed: true,
-      durationMs: Date.now() - startTime,
-    };
-  }
-
-  const initialError = maxRes.error;
-  const initialLogs = maxRes.logs;
-
-  // 2. Stage 2: Baseline Sanity Test (0 modifiers)
+  // 1. Stage 1: Baseline Sanity Test (C = empty, 0 modifiers)
+  // Essential check: verify that the user's default conversion without any active modifiers works smoothly.
   iterations++;
   const baselineModifiers: ConversionModifiers = {
     activeCategories: [],
@@ -249,7 +239,7 @@ export async function runDeltaDebugging(
     selectedSubtitleTracks: [],
     keepAllSubtitles: true,
   };
-  const baseRes = await executeConversion(baselineModifiers);
+  const baseRes = await executeConversion(baselineModifiers, 'Etapa 1/2: Baseline (Conversão padrão limpa sem modificadores)');
 
   if (!baseRes.success) {
     return {
@@ -260,17 +250,38 @@ export async function runDeltaDebugging(
       iterations,
       maximalPassed: false,
       baselinePassed: false,
-      error: baseRes.error || initialError,
-      logs: baseRes.logs || initialLogs,
+      error: baseRes.error || 'Falha na conversão padrão (Baseline sem modificadores).',
+      logs: baseRes.logs,
       durationMs: Date.now() - startTime,
     };
   }
+
+  // 2. Stage 2: Maximal Modifiers Stress Test (C_max)
+  iterations++;
+  const maximalModifiers = combineModifierPatches(pool);
+  const maxRes = await executeConversion(maximalModifiers, `Etapa 2/2: Estresse Máximo (Aplicando pilha de ${pool.length} modificadores)`);
+
+  if (maxRes.success) {
+    return {
+      from: fromExt,
+      to: toExt,
+      engineId,
+      status: 'PASS',
+      iterations,
+      maximalPassed: true,
+      baselinePassed: true,
+      durationMs: Date.now() - startTime,
+    };
+  }
+
+  const initialError = maxRes.error;
+  const initialLogs = maxRes.logs;
 
   // 3. Stage 3: Singleton 1-Minimal Checks
   for (const mod of pool) {
     iterations++;
     const singleMod = combineModifierPatches([mod]);
-    const singleRes = await executeConversion(singleMod);
+    const singleRes = await executeConversion(singleMod, `Etapa 3: Isolamento Singleton (Testando modificador único '${mod.id}')`);
 
     if (!singleRes.success) {
       return {
@@ -307,7 +318,7 @@ export async function runDeltaDebugging(
     // Test each partition
     for (const sub of subsets) {
       iterations++;
-      const res = await executeConversion(combineModifierPatches(sub));
+      const res = await executeConversion(combineModifierPatches(sub), `Etapa 4: Bisseção DDmin (Subconjunto de ${sub.length} modificadores)`);
       if (!res.success) {
         currentSet = sub;
         n = 2;
@@ -325,7 +336,7 @@ export async function runDeltaDebugging(
         if (complement.length === 0) continue;
 
         iterations++;
-        const res = await executeConversion(combineModifierPatches(complement));
+        const res = await executeConversion(combineModifierPatches(complement), `Etapa 4: Bisseção DDmin Complementar (${complement.length} modificadores)`);
         if (!res.success) {
           currentSet = complement;
           n = Math.max(n - 1, 2);

@@ -228,3 +228,16 @@ if (modifiers?.meuModificadorValor) {
 
 1. **Testes Unitários:** Verifique no `mediaProbe.test.ts` ou módulo correspondente.
 2. **Testes E2E:** Adicione um caso de teste em `e2e/test-modifiers.spec.ts` testando a adição via botão `Adicionar Modificador`, interação com os controles e a conversão final.
+
+---
+
+## Passo 8: Princípio de Sintonia e Preservação de Opções (Mandatório)
+
+Ao adicionar ou modificar modificadores que interajam com codecs ou formatos restritos (por exemplo: contêiner 3GP e codec H.263, que suportam estritamente resoluções padronizadas CIF, QCIF e sub-QCIF):
+
+1. **Nunca silenciosamente sobreponha ou remova a escolha do usuário:** O motor de execução **nunca** deve trocar um codec escolhido explicitamente pelo usuário por outro apenas para contornar uma restrição.
+2. **Sintonia Dinâmica na UI:** O card do modificador dependente (ex: `ResolutionCard`) deve receber as propriedades contextuais (`targetFormat`, `videoCodec`) e ajustar suas opções de forma inteligente:
+   - Oferecer presets estritamente compatíveis com o padrão técnico escolhido (ex: CIF 352x288, QCIF 176x144, sub-QCIF 128x96 para H.263).
+   - Ocultar entradas inválidas (ex: dimensões arbitrárias que causariam aborto no encoder).
+   - Exibir nota explicativa orientando o usuário de que selecionar outro codec (ex: MPEG-4) desbloqueia resoluções maiores (HD 720p/1080p).
+3. **Priorize Expandir Opções, Jamais Remover:** O princípio central do FileTools é prover a maior gama possível de configurações aos usuários avançados, garantindo que todas as combinações funcionem em perfeita harmonia.

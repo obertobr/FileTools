@@ -35,6 +35,7 @@ interface CliArgs {
   fps?: number;
   quality?: string;
   allOptions: boolean;
+  baseline: boolean;
 }
 
 function parseCliArgs(): CliArgs {
@@ -44,17 +45,28 @@ function parseCliArgs(): CliArgs {
     all: false,
     verbose: false,
     allOptions: false,
+    baseline: false,
   };
 
   // Support both process.argv and npm_config_* environment variables
+  // Note: npm expands '--to' to '--token-description' via npm_config_token_description
   if (process.env.npm_config_from) options.from = process.env.npm_config_from.toLowerCase().replace(/^\./, '');
   if (process.env.npm_config_to) options.to = process.env.npm_config_to.toLowerCase().replace(/^\./, '');
+  if (process.env.npm_config_token_description) options.to = process.env.npm_config_token_description.toLowerCase().replace(/^\./, '');
+  if (process.env.npm_config_target) options.to = process.env.npm_config_target.toLowerCase().replace(/^\./, '');
   if (process.env.npm_config_engine) options.engine = process.env.npm_config_engine;
   if (process.env.npm_config_file) options.file = process.env.npm_config_file;
+  if (process.env.npm_config_baseline === 'true') options.baseline = true;
+  if (process.env.npm_config_all === 'true') options.all = true;
+  if (process.env.npm_config_all_options === 'true') options.allOptions = true;
+  if (process.env.npm_config_verbose === 'true') options.verbose = true;
+  if (process.env.npm_config_dd === 'false' || process.env.npm_config_no_dd === 'true') options.dd = false;
 
   for (const arg of args) {
     if (arg.startsWith('--from=')) options.from = arg.split('=')[1].toLowerCase().replace(/^\./, '');
     else if (arg.startsWith('--to=')) options.to = arg.split('=')[1].toLowerCase().replace(/^\./, '');
+    else if (arg.startsWith('--target=')) options.to = arg.split('=')[1].toLowerCase().replace(/^\./, '');
+    else if (arg.startsWith('--token-description=')) options.to = arg.split('=')[1].toLowerCase().replace(/^\./, '');
     else if (arg.startsWith('--engine=')) options.engine = arg.split('=')[1];
     else if (arg.startsWith('--file=')) options.file = arg.split('=')[1];
     else if (arg.startsWith('--video-codec=')) options.videoCodec = arg.split('=')[1];
@@ -63,6 +75,7 @@ function parseCliArgs(): CliArgs {
     else if (arg.startsWith('--fps=')) options.fps = Number(arg.split('=')[1]);
     else if (arg.startsWith('--quality=')) options.quality = arg.split('=')[1];
     else if (arg === '--all-options') options.allOptions = true;
+    else if (arg === '--baseline') options.baseline = true;
     else if (arg === '--no-dd') options.dd = false;
     else if (arg === '--all') options.all = true;
     else if (arg === '--verbose' || arg === '-v') options.verbose = true;
@@ -165,151 +178,245 @@ async function main() {
     const targetEngine = options.engine || 'ffmpeg-core-mt';
     process.stdout.write(`• Testando [${conv.from.toUpperCase()} -> ${conv.to.toUpperCase()}] (${targetEngine})... `);
 
-    const ddResult = await page.evaluate(async ({
-      fileBase64,
-      originalName,
-      fromExt,
-      toExt,
-      engineId,
-      runDD,
-      optionOverrides,
-      allOptions,
-    }) => {
-      (window as any).__name = (fn: any) => fn;
+    let ddResult: any;
+    let lastFrameTime = 0;
+    let startedEncoding = false;
+    let isStalled = false;
+    let stallInterval: NodeJS.Timeout | null = null;
+    let overallTimer: NodeJS.Timeout | null = null;
 
-      const { ModuleRegistry } = await import('/src/modules/registry.ts');
-      const { resetFFmpegMT } = await import('/src/modules/ffmpeg-mt.ts');
-      const {
-        runDeltaDebugging,
-        getApplicableModifierPool,
-      } = await import('/src/core/testing/deltaDebugger.ts');
-
-      resetFFmpegMT();
-
-      const moduleInstance = ModuleRegistry[engineId];
-      if (!moduleInstance) {
-        return {
-          from: fromExt,
-          to: toExt,
-          engineId,
-          status: 'FAIL_BASELINE',
-          iterations: 1,
-          maximalPassed: false,
-          error: `Motor '${engineId}' não encontrado no ModuleRegistry.`,
-          durationMs: 0,
-        };
+    const consoleHandler = (msg: any) => {
+      const text = msg.text();
+      if (options.verbose) {
+        console.log(`  [Browser] ${text}`);
       }
+      if (text.includes('frame=') || text.includes('time=')) {
+        startedEncoding = true;
+        lastFrameTime = Date.now();
+      }
+    };
 
-      let pool = getApplicableModifierPool('.' + fromExt, '.' + toExt, moduleInstance.manifest);
+    page.on('console', consoleHandler);
 
-      // Apply any specific option overrides from CLI
-      if (optionOverrides.videoCodec) {
-        pool = pool.filter((p: any) => p.id !== 'video_codec');
-        pool.push({
-          id: 'video_codec',
-          description: `Codec de vídeo customizado (${optionOverrides.videoCodec})`,
-          patch: { videoCodec: optionOverrides.videoCodec },
-        });
-      }
-      if (optionOverrides.audioCodec) {
-        pool = pool.filter((p: any) => p.id !== 'audio_codec');
-        pool.push({
-          id: 'audio_codec',
-          description: `Codec de áudio customizado (${optionOverrides.audioCodec})`,
-          patch: { audioCodec: optionOverrides.audioCodec },
-        });
-      }
-      if (optionOverrides.resolution) {
-        pool = pool.filter((p: any) => p.id !== 'resolution');
-        pool.push({
-          id: 'resolution',
-          description: `Resolução customizada (${optionOverrides.resolution})`,
-          patch: { resolutionScale: optionOverrides.resolution },
-        });
-      }
-      if (optionOverrides.fps) {
-        pool = pool.filter((p: any) => p.id !== 'fps');
-        pool.push({
-          id: 'fps',
-          description: `FPS customizado (${optionOverrides.fps})`,
-          patch: { customFps: optionOverrides.fps, isCustomFps: true },
-        });
-      }
-      if (optionOverrides.quality) {
-        pool = pool.filter((p: any) => p.id !== 'quality');
-        pool.push({
-          id: 'quality',
-          description: `Qualidade customizada (${optionOverrides.quality})`,
-          patch: { qualityPreset: optionOverrides.quality },
-        });
-      }
+    try {
+      const evaluatePromise = page.evaluate(async ({
+        fileBase64,
+        originalName,
+        fromExt,
+        toExt,
+        engineId,
+        runDD,
+        runBaseline,
+        optionOverrides,
+        allOptions,
+      }) => {
+        (window as any).__name = (fn: any) => fn;
 
-      // Convert base64 back to Uint8Array inside browser
-      const binStr = atob(fileBase64);
-      const u8File = new Uint8Array(binStr.length);
-      for (let i = 0; i < binStr.length; i++) {
-        u8File[i] = binStr.charCodeAt(i);
-      }
+        const { ModuleRegistry } = await import('/src/modules/registry.ts');
+        const { resetFFmpegMT } = await import('/src/modules/ffmpeg-mt.ts');
+        const {
+          runDeltaDebugging,
+          getApplicableModifierPool,
+        } = await import('/src/core/testing/deltaDebugger.ts');
 
-      const execute = async (modifiers: any) => {
-        const u8 = new Uint8Array(u8File);
-        const logs: string[] = [];
+        resetFFmpegMT();
 
-        try {
-          const out = await moduleInstance.execute(
-            {
-              fileData: u8,
-              originalName,
-              targetFormat: '.' + toExt,
-              modifiers,
-            },
-            {
-              onProgress: () => {},
-              onLog: (m: string) => logs.push(m),
-              workspacePath: '/workspace',
-            }
-          );
-          const ok = Boolean(out && out.outputData && out.outputData.byteLength > 0);
-          return { success: ok, logs: logs.slice(-6) };
-        } catch (err) {
-          return { success: false, error: String(err), logs: logs.slice(-6) };
+        const moduleInstance = ModuleRegistry[engineId];
+        if (!moduleInstance) {
+          return {
+            from: fromExt,
+            to: toExt,
+            engineId,
+            status: 'FAIL_BASELINE',
+            iterations: 1,
+            maximalPassed: false,
+            error: `Motor '${engineId}' não encontrado no ModuleRegistry.`,
+            durationMs: 0,
+          };
         }
-      };
 
-      if (!runDD) {
-        // Simple direct test
-        const poolMods = (await import('/src/core/testing/deltaDebugger.ts')).combineModifierPatches(pool);
-        const res = await execute(poolMods);
-        return {
-          from: fromExt,
-          to: toExt,
-          engineId,
-          status: res.success ? 'PASS' : 'FAIL_BASELINE',
-          iterations: 1,
-          maximalPassed: res.success,
-          error: res.error,
-          logs: res.logs,
-          durationMs: 0,
+        let pool = getApplicableModifierPool('.' + fromExt, '.' + toExt, moduleInstance.manifest);
+
+        // Apply any specific option overrides from CLI
+        if (optionOverrides.videoCodec) {
+          pool = pool.filter((p: any) => p.id !== 'video_codec');
+          pool.push({
+            id: 'video_codec',
+            description: `Codec de vídeo customizado (${optionOverrides.videoCodec})`,
+            patch: { videoCodec: optionOverrides.videoCodec },
+          });
+        }
+        if (optionOverrides.audioCodec) {
+          pool = pool.filter((p: any) => p.id !== 'audio_codec');
+          pool.push({
+            id: 'audio_codec',
+            description: `Codec de áudio customizado (${optionOverrides.audioCodec})`,
+            patch: { audioCodec: optionOverrides.audioCodec },
+          });
+        }
+        if (optionOverrides.resolution) {
+          pool = pool.filter((p: any) => p.id !== 'resolution');
+          pool.push({
+            id: 'resolution',
+            description: `Resolução customizada (${optionOverrides.resolution})`,
+            patch: { resolutionScale: optionOverrides.resolution },
+          });
+        }
+        if (optionOverrides.fps) {
+          pool = pool.filter((p: any) => p.id !== 'fps');
+          pool.push({
+            id: 'fps',
+            description: `FPS customizado (${optionOverrides.fps})`,
+            patch: { customFps: optionOverrides.fps, isCustomFps: true },
+          });
+        }
+        if (optionOverrides.quality) {
+          pool = pool.filter((p: any) => p.id !== 'quality');
+          pool.push({
+            id: 'quality',
+            description: `Qualidade customizada (${optionOverrides.quality})`,
+            patch: { qualityPreset: optionOverrides.quality },
+          });
+        }
+
+        // Convert base64 back to Uint8Array inside browser
+        const binStr = atob(fileBase64);
+        const u8File = new Uint8Array(binStr.length);
+        for (let i = 0; i < binStr.length; i++) {
+          u8File[i] = binStr.charCodeAt(i);
+        }
+
+        const execute = async (modifiers: any, stageLabel?: string) => {
+          const u8 = new Uint8Array(u8File);
+          const logs: string[] = [];
+          if (stageLabel) {
+            console.log(`\n  [DDmin] ${stageLabel}`);
+          }
+
+          try {
+            const out = await moduleInstance.execute(
+              {
+                fileData: u8,
+                originalName,
+                targetFormat: '.' + toExt,
+                modifiers,
+              },
+              {
+                onProgress: (p, msg) => {
+                  if (msg) console.log(`[Progress ${p}%] ${msg}`);
+                },
+                onLog: (m: string) => {
+                  logs.push(m);
+                  console.log(m);
+                },
+                workspacePath: '/workspace',
+              }
+            );
+            const ok = Boolean(out && out.outputData && out.outputData.byteLength > 0);
+            return { success: ok, logs: logs.slice(-6) };
+          } catch (err) {
+            return { success: false, error: String(err), logs: logs.slice(-6) };
+          }
         };
-      }
 
-      return await runDeltaDebugging(fromExt, toExt, engineId, pool, execute);
-    }, {
-      fileBase64,
-      originalName,
-      fromExt: conv.from,
-      toExt: conv.to,
-      engineId: targetEngine,
-      runDD: options.dd,
-      optionOverrides: {
-        videoCodec: options.videoCodec,
-        audioCodec: options.audioCodec,
-        resolution: options.resolution,
-        fps: options.fps,
-        quality: options.quality,
-      },
-      allOptions: options.allOptions,
-    });
+        const t0 = Date.now();
+        if (runBaseline) {
+          const res = await execute({
+            activeCategories: [],
+            selectedAudioTracks: [],
+            selectedSubtitleTracks: [],
+            keepAllSubtitles: true,
+          }, 'Baseline direto (sem modificadores)');
+          return {
+            from: fromExt,
+            to: toExt,
+            engineId,
+            status: res.success ? 'PASS' : 'FAIL_BASELINE',
+            iterations: 1,
+            maximalPassed: false,
+            baselinePassed: res.success,
+            error: res.error,
+            logs: res.logs,
+            durationMs: Date.now() - t0,
+          };
+        }
+
+        if (allOptions) {
+          const poolMods = (await import('/src/core/testing/deltaDebugger.ts')).combineModifierPatches(pool);
+          const res = await execute(poolMods, 'Modificadores combinados totais');
+          return {
+            from: fromExt,
+            to: toExt,
+            engineId,
+            status: res.success ? 'PASS' : 'FAIL_BASELINE',
+            iterations: 1,
+            maximalPassed: res.success,
+            error: res.error,
+            logs: res.logs,
+            durationMs: Date.now() - t0,
+          };
+        }
+
+        return await runDeltaDebugging(fromExt, toExt, engineId, pool, execute);
+      }, {
+        fileBase64,
+        originalName,
+        fromExt: conv.from,
+        toExt: conv.to,
+        engineId: targetEngine,
+        runDD: options.dd,
+        runBaseline: options.baseline,
+        optionOverrides: {
+          videoCodec: options.videoCodec,
+          audioCodec: options.audioCodec,
+          resolution: options.resolution,
+          fps: options.fps,
+          quality: options.quality,
+        },
+        allOptions: options.allOptions,
+      });
+
+      // Stall Watchdog in Node.js (10s threshold for heavy moov atom relocation)
+      const stallPromise = new Promise((_, reject) => {
+        stallInterval = setInterval(() => {
+          if (startedEncoding && lastFrameTime > 0 && Date.now() - lastFrameTime > 10_000) {
+            isStalled = true;
+            if (stallInterval) clearInterval(stallInterval);
+            reject(new Error('ESTAGNAÇÃO DE QUADROS (STALL): Motor FFmpeg travou sem emitir frames ou progresso por mais de 10 segundos.'));
+          }
+        }, 500);
+      });
+
+      // Overall hard timeout (120 seconds, unref'd so it doesn't block process exit)
+      const overallTimeoutPromise = new Promise((_, reject) => {
+        overallTimer = setTimeout(() => {
+          reject(new Error('TIMEOUT TOTAL EXCEDIDO (120s): A conversão não completou no tempo limite.'));
+        }, 120_000);
+        overallTimer.unref?.();
+      });
+
+      ddResult = await Promise.race([evaluatePromise, stallPromise, overallTimeoutPromise]);
+    } catch (err: any) {
+      // Reload page to reset crashed/deadlocked WASM workers
+      await page.reload();
+      await page.locator('[data-hydrated="true"]').waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+
+      ddResult = {
+        from: conv.from,
+        to: conv.to,
+        engineId: targetEngine,
+        status: 'FAIL_BASELINE',
+        iterations: 1,
+        maximalPassed: false,
+        baselinePassed: false,
+        error: String(err?.message || err),
+        durationMs: 6000,
+      };
+    } finally {
+      if (stallInterval) clearInterval(stallInterval);
+      if (overallTimer) clearTimeout(overallTimer);
+      page.off('console', consoleHandler);
+    }
 
     results.push(ddResult);
 
@@ -352,6 +459,7 @@ async function main() {
   if (failed > 0) {
     process.exit(1);
   }
+  process.exit(0);
 }
 
 main().catch((err) => {

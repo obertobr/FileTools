@@ -358,23 +358,39 @@ O FileTools possui um sistema automatizado de testes de conversão com **Delta D
 ### Por que usar Delta Debugging?
 Em conversões de mídia com múltiplos modificadores (resolução, taxa de quadros, codecs de áudio/vídeo, mesclagem de faixas, threads, etc.), testar todas as centenas de permutações combinatórias é proibitivamente demorado. O algoritmo DDmin resolve isso de maneira cirúrgica:
 
-1. **Fast-Path (Pilha Máxima $C_{max}$)**: Aplica todos os modificadores aplicáveis suportados pelo motor de uma vez só. Se passar, a conversão é aprovada em 1 ciclo (~1s).
-2. **Sanity Baseline ($C = \emptyset$)**: Se a pilha máxima falhar, testa sem nenhum modificador. Se falhar, acusa imediatamente `FAIL_BASELINE` (incompatibilidade estrutural do contêiner).
-3. **Isolamento Singleton ($|C| = 1$)**: Se o baseline passar, testa cada modificador isolado para detectar modificadores individualmente quebrados (`FAIL_SINGLETON`).
-4. **Bissecção Binária DDmin**: Se nenhum modificador falhar sozinho, divide o conjunto em partições e complementos sucessivos até isolar o subconjunto mínimo de interação (`FAIL_INTERACTION`).
+1. **Etapa 1: Prioridade Obrigatória ao Baseline ($C = \emptyset$)**:
+   Antes de aplicar modificadores, o executor **sempre** testa a conversão padrão sem qualquer modificador ativo. Isso garante que o caso de uso mais comum do usuário (upload e conversão direta) seja validado primeiro e impede que erros do baseline fiquem mascarados.
+2. **Etapa 2: Estresse Máximo ($C_{max}$)**:
+   Aplica todos os modificadores suportados pelo motor de uma vez só. Se passar junto com o baseline, a conversão é aprovada em 2 iterações rápidas.
+3. **Etapa 3: Isolamento Singleton ($|C| = 1$)**:
+   Se a pilha máxima falhar, testa cada modificador isoladamente para detectar o modificador pontualmente quebrado (`FAIL_SINGLETON`).
+4. **Etapa 4: Bissecção Binária DDmin**:
+   Se nenhum modificador falhar sozinho, divide o conjunto em partições e complementos sucessivos até isolar a interação conflitante exata (`FAIL_INTERACTION`).
+
+### Cães de Guarda (Stall Watchdog & Timeouts)
+Para evitar que execuções WebAssembly multithread travem o terminal indefinidamente em caso de deadlocks (`Atomics.wait` ou starvation):
+- **Frame Stall Watchdog:** Monitora a emissão de frames a cada 500ms; se o motor passar mais de 10 segundos sem qualquer progresso de codificação ou atividade de metadados, o teste é abortado com `ESTAGNAÇÃO DE QUADROS (STALL)`.
+- **Hard Timeout Global:** Limite máximo de 120 segundos para conversões de arquivos pesados.
+- **Transparência de Etapas:** Cada fase do teste exibe claramente o rótulo de execução (`Etapa 1/2: Baseline`, `Etapa 2/2: Estresse Máximo`), evitando pausas silenciosas.
+
+### Fixtures Realistas (`scripts/generate-fixtures.js`)
+Os testes automatizados utilizam fixtures geradas programaticamente com características reais de produção:
+- `sample.mkv` / `sample_multitrack_1080p.mkv`: 1080p (1920x1080), 30 fps, 3 faixas de áudio AAC independentes (`TUDO`, `MIC`, `SISTEMA`), `yuv420p`.
+- `sample_4k_multitrack.mkv`: 4K UHD (3840x2160), 30 fps, 3 faixas de áudio AAC.
 
 ### Comandos de Teste Direcionado
 
 ```bash
 # Testar exatamente a conversão em que você está mexendo (em segundos)
-npx tsx scripts/test-conversion.ts --from=mkv --to=webm
+npx tsx scripts/test-conversion.ts --from=mkv --to=mp4
+npm run test:conversion --from=mkv --to=mp4
 
-# Testar todas as conversões de uma extensão de origem em um motor específico
-npx tsx scripts/test-conversion.ts --from=mkv --engine=ffmpeg-core-mt
+# Testar apenas o baseline limpo (sem modificadores)
+npx tsx scripts/test-conversion.ts --from=mkv --to=mp4 --baseline
 
-# Testar com arquivo de teste customizado
-npx tsx scripts/test-conversion.ts --from=mkv --to=mp4 --file=tests/fixtures/2025-03-31\ 23-44-55.mkv
+# Testar com arquivo de teste pesado customizado
+npx tsx scripts/test-conversion.ts --from=mkv --to=mp4 --file="tests/fixtures/2025-03-31 23-44-55.mkv"
 
-# Via script npm configurado
-npm run test:conversion -- --from=mkv --to=webm
+# Testar com codec específico e verbose habilitado
+npx tsx scripts/test-conversion.ts --from=mkv --to=3gp --video-codec=h263 --verbose
 ```

@@ -35,7 +35,7 @@ describe('Delta Debugger (DDmin)', () => {
     expect(pool.map((p) => p.id)).toEqual(['fps', 'resolution']);
   });
 
-  it('returns PASS in 1 iteration when maximal modifiers succeed (fast-path)', async () => {
+  it('returns PASS in 2 iterations when baseline and maximal modifiers both succeed', async () => {
     const pool: ModifierPatch[] = [
       { id: 'fps', description: 'FPS', patch: { customFps: 24 } },
       { id: 'resolution', description: 'Res', patch: { resolutionScale: '720p' } },
@@ -49,8 +49,10 @@ describe('Delta Debugger (DDmin)', () => {
     });
 
     expect(res.status).toBe('PASS');
-    expect(res.iterations).toBe(1);
-    expect(callCount).toBe(1);
+    expect(res.baselinePassed).toBe(true);
+    expect(res.maximalPassed).toBe(true);
+    expect(res.iterations).toBe(2);
+    expect(callCount).toBe(2);
   });
 
   it('detects FAIL_BASELINE when baseline conversion without modifiers fails', async () => {

@@ -200,6 +200,13 @@ O sistema de opções avançadas (Pilha de Modificadores (Modifier Stack)) obede
 2. **Prevenção de Execução Silenciosa Falha**: Caso o motor atual não suporte aplicar as alterações solicitadas, a conversão é bloqueada na UI com indicação clara do motivo e botão de alternância imediata para o motor transcodificador compatível.
 3. **Extração e Fidelidade de Metadados**: O probe binário nativo (`src/core/media/mediaProbe.ts`) garante que framerate e dimensões sejam populados a partir do arquivo real do usuário, eliminando defaults arbitrários.
 
+### 12.4. Princípio de Sintonia e Preservação de Opções
+1. **Preservar em Vez de Remover ou Sobrescrever**: O FileTools prioriza rigorosamente expandir e preservar o maior número possível de opções para o usuário. Nunca se deve remover opções da interface ou alterar escolhas do usuário de forma silenciosa ("por baixo dos panos") dentro dos motores de conversão.
+2. **Sintonia Mútua (Synergy) entre Modificadores**: Quando dois ou mais modificadores possuem restrições técnicas cruzadas (exemplo: o codec de vídeo H.263 em contêiner 3GP que aceita estritamente resoluções padronizadas CIF, QCIF e sub-QCIF):
+   - Os modificadores devem operar em sintonia dinâmica: se o usuário seleciona o codec H.263, o modificador de resolução apresenta e restringe as opções estritamente àquelas suportadas pelo codec selecionado, acompanhado de orientação informativa clara na UI (orientando que codecs modernos como MPEG-4 liberam resoluções 720p/1080p).
+   - O motor de conversão honra com precisão a escolha explícita do usuário (se o usuário escolheu H.263, executa com H.263; se escolheu MPEG-4, executa com MPEG-4).
+3. **Resiliência a Cargas Arbitrárias**: O sistema deve se auto-adaptar a qualquer complexidade de arquivo de entrada (desde amostras ultra-leves até vídeos de alta densidade 1080p e 4K multifaixas), dimensionando buffers e threads para rodar com eficiência máxima sem estourar limites de memória.
+
 
 
 ---

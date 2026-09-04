@@ -21,7 +21,7 @@ export type ModifierCategoryId =
 
 export type QualityPreset = 'original' | 'balanced' | 'compressed' | 'custom';
 
-export type ResolutionScale = 'original' | '1080p' | '720p' | '480p' | '320p' | 'custom';
+export type ResolutionScale = 'original' | '1080p' | '720p' | '480p' | '320p' | 'cif' | 'qcif' | 'sub-qcif' | 'custom';
 
 export type VideoCodecChoice =
   | 'auto'
@@ -30,6 +30,7 @@ export type VideoCodecChoice =
   | 'vp8'
   | 'vp9'
   | 'mpeg4'
+  | 'h263'
   | 'theora'
   | 'copy';
 

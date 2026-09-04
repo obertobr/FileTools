@@ -156,6 +156,12 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
       videoScaleFilter = ['-vf', 'scale=854:-2'];
     } else if (options.resolutionScale === '320p') {
       videoScaleFilter = ['-vf', 'scale=480:-2'];
+    } else if (options.resolutionScale === 'cif') {
+      videoScaleFilter = ['-s', '352x288'];
+    } else if (options.resolutionScale === 'qcif') {
+      videoScaleFilter = ['-s', '176x144'];
+    } else if (options.resolutionScale === 'sub-qcif') {
+      videoScaleFilter = ['-s', '128x96'];
     }
   }
 
@@ -383,7 +389,14 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
   // 10. Video to 3GP
   if (to === '.3gp') {
     const isCustomScale = videoScaleFilter.length > 0;
-    const vCodec = isCustomScale ? 'mpeg4' : 'h263';
+    let vCodec = 'h263';
+    if (userVideoCodec && userVideoCodec !== 'auto') {
+      // Prioritize preserving user's explicit codec choice
+      vCodec = userVideoCodec === 'mpeg4' ? 'mpeg4' : (userVideoCodec === 'h264' ? 'libx264' : 'h263');
+    } else if (isCustomScale) {
+      // Automatic fallback to mpeg4 only when user hasn't explicitly chosen h263
+      vCodec = 'mpeg4';
+    }
     const scale = isCustomScale ? videoScaleFilter : ['-s', '176x144'];
     const fps = videoFpsArgs.length > 0 ? videoFpsArgs : ['-r', '15'];
     return ['-c:v', vCodec, ...scale, ...fps, ...videoAudioFlags];
