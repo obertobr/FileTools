@@ -88,7 +88,7 @@ A suíte de testes foca em regras de negócio críticas:
 │   ├── ARCHITECTURE.MD              # Visão geral e regras do sistema
 │   ├── guides/                      # Guias práticos de desenvolvimento
 │   │   ├── adding-a-module.md       # Como criar e registrar um novo módulo IModule
-│   │   ├── adding-an-option.md      # Como adicionar opção ao Config Stack
+│   │   ├── adding-a-modifier.md      # Como adicionar modificador à Pilha de Modificadores
 │   │   ├── adding-a-format.md       # Como registrar formato no catálogo e SSG
 │   │   └── testing-strategy.md      # Estratégia e padrões obrigatórios de testes
 │   └── protocols/                   # Especificações isoladas de protocolos
@@ -119,16 +119,16 @@ A suíte de testes foca em regras de negócio críticas:
 │   ├── shared/                      # Tipagens e utilitários agnósticos
 │   │   ├── types/
 │   │   │   ├── module.ts            # Contratos TypeScript de IModule
-│   │   │   └── conversionOptions.ts # Tipos do Config Stack (opções avançadas)
+│   │   │   └── conversionModifiers.ts # Tipos da Pilha de Modificadores (Modifier Stack)
 │   │   └── utils/                   # Utilitários compartilhados
 │   ├── styles/                      # Design System & Tailwind Tokens
 │   │   └── global.css               # Tokens inline e base styles
 │   ├── ui/
 │   │   ├── components/              # Componentes de interface
 │   │   │   ├── core/                # Design System Base (Button, Card, Typography, etc.)
-│   │   │   ├── options/             # Cards modulares do Config Stack
-│   │   │   │   ├── CategoryDefinitions.ts  # Catálogo de categorias disponíveis
-│   │   │   │   ├── AddCategoryPicker.tsx   # Modal de busca/adição de categorias
+│   │   │   ├── modifiers/             # Cards modulares do Pilha de Modificadores (Modifier Stack)
+│   │   │   │   ├── ModifierDefinitions.ts  # Catálogo de categorias disponíveis
+│   │   │   │   ├── AddModifierPicker.tsx   # Modal de busca/adição de categorias
 │   │   │   │   ├── AudioTracksCard.tsx     # Card: seleção de faixas de áudio
 │   │   │   │   ├── SubtitlesCard.tsx       # Card: seleção de legendas
 │   │   │   │   ├── FpsCard.tsx             # Card: taxa de quadros
@@ -138,7 +138,7 @@ A suíte de testes foca em regras de negócio críticas:
 │   └── pages/                       # Roteamento Astro SSG
 ├── e2e/                             # Testes End-to-End (Playwright)
 │   ├── modules/                     # Testes de conversão por módulo
-│   └── test-options.spec.ts         # Testes do Config Stack UI
+│   └── test-modifiers.spec.ts         # Testes do Pilha de Modificadores (Modifier Stack) UI
 └── tests/                           # Fixtures e helpers de teste
     └── fixtures/                    # Arquivos reais para testes
 ```
@@ -152,7 +152,7 @@ Para manter a **padronização** e **escalabilidade** do sistema, consulte os gu
 | Guia | Quando Consultar |
 |---|---|
 | [`guides/adding-a-module.md`](./guides/adding-a-module.md) | Ao criar um novo motor de conversão (implementar `IModule`) |
-| [`guides/adding-an-option.md`](./guides/adding-an-option.md) | Ao adicionar uma opção ao Config Stack (nova categoria) |
+| [`guides/adding-a-modifier.md`](./guides/adding-a-modifier.md) | Ao adicionar uma opção ao Pilha de Modificadores (Modifier Stack) (nova categoria) |
 | [`guides/adding-a-format.md`](./guides/adding-a-format.md) | Ao registrar um formato novo no catálogo ou SSG |
 | [`guides/testing-strategy.md`](./guides/testing-strategy.md) | Ao escrever testes ou verificar pipeline de validação |
 
@@ -160,9 +160,9 @@ Estes documentos são a **fonte de verdade** para implementação. Desvios dos p
 
 ---
 
-## 11. Princípio da Matriz Universal de Opções de Conversão
+## 11. Princípio da Matriz Universal de Modificadores de Conversão
 
-O sistema de opções avançadas (Config Stack) obedece estritamente à regra de **Capacidades Semânticas de Mídia**:
+O sistema de opções avançadas (Pilha de Modificadores (Modifier Stack)) obedece estritamente à regra de **Capacidades Semânticas de Mídia**:
 
 1. **Classificação por Categorias de Mídia:**
    - Em vez de listas manuais e frágeis de extensões (ex: `['mp4', 'mkv']`), as opções são resolvidas cruzando `categoryOfExtension(sourceExt)` com `categoryOfExtension(target)`.
@@ -170,14 +170,14 @@ O sistema de opções avançadas (Config Stack) obedece estritamente à regra de
    - Conversões de vídeo para áudio ou vídeo para vídeo oferecem **Juntar Faixas de Áudio** (`audio_merge`) para mixagem em fluxo único via filtro `amix`.
    - Conversões de imagem para vídeo oferecem **Duração do Vídeo** (`video_duration`), sendo proibida a exibição desta opção em conversões de foto para foto (imagem para imagem).
 2. **Higienização e Exclusividade Mútua:**
-   - O orquestrador `ConversionOptionsPanel` higieniza e poda automaticamente qualquer categoria que não pertença à conversão ativa (*auto-pruning*).
+   - O orquestrador `ConversionModifiersPanel` higieniza e poda automaticamente qualquer categoria que não pertença à conversão ativa (*auto-pruning*).
    - `audio_merge` (mixagem de faixas) e `audio_tracks` (manter trilhas separadas no contêiner) operam em regime de exclusão mútua na interface.
 
 ## 12. Compatibilidade de Motores e Inicialização com Metadados Nativos
 
 ### 12.1. Matriz de Compatibilidade Motor x Capacidade
 
-| Opção / Configuração | Remux Direto (`stream-copy`) | FFmpeg Multi-Thread (`ffmpeg-core-mt`) | FFmpeg Single-Thread (`ffmpeg-core`) |
+| Modificadorre`) |
 |---|:---:|:---:|:---:|
 | **Cópia Instantânea (`-c copy`)** | Sim | Sim | Sim |
 | **Taxa de Quadros (`-r fps`)** | ❌ Incompatível | ✅ Total | ✅ Total |

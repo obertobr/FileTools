@@ -13,13 +13,13 @@ test.describe('Seletor de Codecs de Vídeo e Áudio Expandidos', () => {
     await page.goto('/converter/mkv-para-mp4');
     await page.locator('[data-hydrated="true"]').waitFor({ state: 'visible' });
 
-    // Upload sample.mkv to reveal options stack
+    // Upload sample.mkv to reveal modifiers stack
     const fileInput = page.locator('input[type="file"]');
     await fileInput.setInputFiles(path.join(fixturesDir, 'sample.mkv'));
     await expect(page.locator('text=sample.mkv')).toBeVisible({ timeout: 10_000 });
 
     // Open add category picker
-    await page.getByRole('button', { name: /Adicionar Configura/i }).click();
+    await page.getByRole('button', { name: /Adicionar Modificador/i }).click();
 
     // Select video_codec
     const videoCodecOption = page.locator('div[role="button"]:has-text("Codec de Vídeo")');
@@ -44,13 +44,13 @@ test.describe('Seletor de Codecs de Vídeo e Áudio Expandidos', () => {
     await page.goto('/converter/wav-para-mp3');
     await page.locator('[data-hydrated="true"]').waitFor({ state: 'visible' });
 
-    // Upload sample.wav to reveal options stack
+    // Upload sample.wav to reveal modifiers stack
     const fileInput = page.locator('input[type="file"]');
     await fileInput.setInputFiles(path.join(fixturesDir, 'sample.wav'));
     await expect(page.locator('text=sample.wav')).toBeVisible({ timeout: 10_000 });
 
     // Open add category picker
-    await page.getByRole('button', { name: /Adicionar Configura/i }).click();
+    await page.getByRole('button', { name: /Adicionar Modificador/i }).click();
 
     // Select audio_codec
     const audioCodecOption = page.locator('div[role="button"]:has-text("Codec de Áudio")');

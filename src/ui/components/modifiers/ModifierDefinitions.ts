@@ -1,10 +1,10 @@
 import React from 'react';
 import { Volume2, Layers, MessageSquare, Cpu, Sparkles, Film, Maximize2, Gauge, Music, Clock } from 'lucide-react';
-import type { ConfigCategoryId } from '@/shared/types/conversionOptions';
+import type { ModifierCategoryId } from '@/shared/types/conversionModifiers';
 import { categoryOfExtension } from '@/lib/formats';
 
-export interface CategoryDefinition {
-  id: ConfigCategoryId;
+export interface ModifierDefinition {
+  id: ModifierCategoryId;
   title: string;
   description: string;
   icon: React.ElementType;
@@ -12,7 +12,7 @@ export interface CategoryDefinition {
   isPinned?: (target: string, sourceExt?: string) => boolean;
 }
 
-export const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
+export const MODIFIER_DEFINITIONS: ModifierDefinition[] = [
   {
     id: 'video_duration',
     title: 'Duração do Vídeo',

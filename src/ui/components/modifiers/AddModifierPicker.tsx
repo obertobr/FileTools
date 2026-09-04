@@ -1,32 +1,32 @@
 import React from 'react';
 import { Search, Plus, AlertTriangle } from 'lucide-react';
 import { Card, Typography } from '@/ui/components/core';
-import type { ConfigCategoryId } from '@/shared/types/conversionOptions';
-import type { CategoryDefinition } from './CategoryDefinitions';
-import { isCategoryIncompatibleWithEngine } from '@/modules/engineCapabilities';
+import type { ModifierCategoryId } from '@/shared/types/conversionModifiers';
+import type { ModifierDefinition } from './ModifierDefinitions';
+import { isModifierIncompatibleWithEngine } from '@/modules/engineCapabilities';
 
-export interface AddCategoryPickerProps {
-  availableToAdd: CategoryDefinition[];
+export interface AddModifierPickerProps {
+  availableToAdd: ModifierDefinition[];
   searchQuery: string;
   onSearchChange: (q: string) => void;
-  onSelectCategory: (id: ConfigCategoryId) => void;
+  onSelectModifier: (id: ModifierCategoryId) => void;
   onClose: () => void;
   currentEngineId?: string | null;
 }
 
-export function AddCategoryPicker({
+export function AddModifierPicker({
   availableToAdd,
   searchQuery,
   onSearchChange,
-  onSelectCategory,
+  onSelectModifier,
   onClose,
   currentEngineId,
-}: AddCategoryPickerProps) {
+}: AddModifierPickerProps) {
   return (
     <Card variant="raised" className="p-3 space-y-2 border-primary/30 bg-surface shadow-md animate-in fade-in-50 duration-150">
       <div className="flex items-center justify-between pb-1 border-b border-border">
         <Typography variant="body" className="font-semibold text-xs">
-          Adicionar Categoria à Pilha
+          Adicionar Modificador à Pilha
         </Typography>
         <button
           type="button"
@@ -44,7 +44,7 @@ export function AddCategoryPicker({
           type="text"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Buscar configuração (ex: áudio, legendas, threads, qualidade, fps)..."
+          placeholder="Buscar modificador (ex: áudio, legendas, threads, qualidade, fps)..."
           className="w-full rounded-md border border-border bg-surface-raised pl-8 pr-3 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
           autoFocus
         />
@@ -54,23 +54,23 @@ export function AddCategoryPicker({
       <div className="max-h-56 overflow-y-auto space-y-1 pt-1 pr-0.5">
         {availableToAdd.length === 0 ? (
           <div className="p-3 text-center text-[11px] text-muted-foreground">
-            {searchQuery ? 'Nenhuma categoria encontrada com esse termo.' : 'Todas as categorias disponíveis já foram adicionadas à pilha!'}
+            {searchQuery ? 'Nenhum modificador encontrado com esse termo.' : 'Todos os modificadores disponíveis já foram adicionados à pilha!'}
           </div>
         ) : (
-          availableToAdd.map((cat) => {
-            const Icon = cat.icon;
-            const isIncompatible = isCategoryIncompatibleWithEngine(cat.id, currentEngineId);
+          availableToAdd.map((mod) => {
+            const Icon = mod.icon;
+            const isIncompatible = isModifierIncompatibleWithEngine(mod.id, currentEngineId);
 
             return (
               <div
-                key={cat.id}
+                key={mod.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => onSelectCategory(cat.id)}
+                onClick={() => onSelectModifier(mod.id)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    onSelectCategory(cat.id);
+                    onSelectModifier(mod.id);
                   }
                 }}
                 className="flex items-center justify-between p-2 rounded-md border border-border bg-surface-raised/60 hover:bg-surface-raised hover:border-primary/50 transition-colors cursor-pointer"
@@ -81,7 +81,7 @@ export function AddCategoryPicker({
                   </span>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[12px] font-medium text-foreground">{cat.title}</span>
+                      <span className="text-[12px] font-medium text-foreground">{mod.title}</span>
                       {isIncompatible && (
                         <span className="inline-flex items-center gap-1 text-[9px] font-medium bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded">
                           <AlertTriangle className="size-2.5 text-red-400" />
@@ -89,7 +89,7 @@ export function AddCategoryPicker({
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-muted-foreground truncate">{cat.description}</div>
+                    <div className="text-[11px] text-muted-foreground truncate">{mod.description}</div>
                   </div>
                 </div>
                 <Plus className="size-4 text-primary shrink-0 ml-2" />

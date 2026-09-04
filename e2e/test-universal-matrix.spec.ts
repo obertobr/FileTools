@@ -20,8 +20,8 @@ test.describe('Matriz Universal de Opções de Conversão', () => {
     // In photo to photo, video duration must NOT be pinned or active
     await expect(page.locator('text=Duração do Vídeo')).toHaveCount(0);
 
-    // If options picker exists, open it and verify no video_duration
-    const addBtn = page.getByRole('button', { name: /Adicionar Configura/i });
+    // If modifiers picker exists, open it and verify no video_duration
+    const addBtn = page.getByRole('button', { name: /Adicionar Modificador/i });
     if (await addBtn.isVisible()) {
       await addBtn.click();
       await expect(page.locator('div[role="button"]:has-text("Duração do Vídeo")')).toHaveCount(0);
@@ -39,8 +39,8 @@ test.describe('Matriz Universal de Opções de Conversão', () => {
     await fileInput.setInputFiles(path.join(fixturesDir, 'sample.mkv'));
     await expect(page.locator('text=sample.mkv')).toBeVisible({ timeout: 10_000 });
 
-    // Abrir o seletor de configurações
-    await page.getByRole('button', { name: /Adicionar Configura/i }).click();
+    // Abrir o seletor de modificadores
+    await page.getByRole('button', { name: /Adicionar Modificador/i }).click();
 
     // Confirmar que "Juntar Faixas de Áudio" AGORA ESTÁ DISPONÍVEL para vídeo para vídeo!
     const mergeOption = page.locator('div[role="button"]:has-text("Juntar Faixas de Áudio")');
@@ -57,8 +57,8 @@ test.describe('Matriz Universal de Opções de Conversão', () => {
     await expect(page.getByText('Juntar Faixas de Áudio').first()).toBeVisible();
     await expect(page.locator('text=vídeo final')).toBeVisible();
 
-    // Reabrir o seletor de configurações: "Faixas de Áudio" NÃO DEVE MAIS APARECER (exclusão mútua)
-    await page.getByRole('button', { name: /Adicionar Configura/i }).click();
+    // Reabrir o seletor de modificadores: "Faixas de Áudio" NÃO DEVE MAIS APARECER (exclusão mútua)
+    await page.getByRole('button', { name: /Adicionar Modificador/i }).click();
     await expect(page.locator('div[role="button"]:has-text("Faixas de Áudio")').filter({ hasNotText: 'Juntar' })).toHaveCount(0);
   });
 
@@ -71,8 +71,8 @@ test.describe('Matriz Universal de Opções de Conversão', () => {
     await fileInput.setInputFiles(path.join(fixturesDir, 'sample.mkv'));
     await expect(page.locator('text=sample.mkv')).toBeVisible({ timeout: 10_000 });
 
-    // Abrir o seletor de configurações
-    await page.getByRole('button', { name: /Adicionar Configura/i }).click();
+    // Abrir o seletor de modificadores
+    await page.getByRole('button', { name: /Adicionar Modificador/i }).click();
 
     // Verificar que Resolução e Escala está presente para MPEG!
     await expect(page.locator('div[role="button"]:has-text("Resolução e Escala")')).toBeVisible();

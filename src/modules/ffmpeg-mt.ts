@@ -11,7 +11,7 @@ import { toBlobURL } from '@ffmpeg/util';
 import type { IModule, ExecutionContext } from '../shared/types/module';
 import { getOptimalThreadProfile, type ThreadProfile } from '../core/hardware/threadOptimizer';
 import { categoryOfExtension } from '../lib/formats';
-import type { ConversionOptions } from '../shared/types/conversionOptions';
+import type { ConversionModifiers } from '../shared/types/conversionModifiers';
 
 let ffmpegMtInstance: FFmpeg | null = null;
 let ffmpegMtLoaded = false;
@@ -107,7 +107,7 @@ function getConversionArgs(
   inputExt: string,
   outputExt: string,
   profile: ThreadProfile,
-  options?: ConversionOptions
+  options?: ConversionModifiers
 ): string[] {
   const from = inputExt.toLowerCase();
   const to = outputExt.toLowerCase();
@@ -599,7 +599,7 @@ export const FFmpegMTModule: IModule = {
     const fileData = inputs.fileData as Uint8Array;
     const originalName = inputs.originalName as string;
     const targetFormat = inputs.targetFormat as string;
-    const options = (inputs.options as ConversionOptions) || undefined;
+    const options = (inputs.modifiers as ConversionModifiers) || (inputs.options as ConversionModifiers) || undefined;
 
     if (!fileData || !originalName || !targetFormat) {
       throw new Error('FFmpeg MT module requires fileData (Uint8Array), originalName, and targetFormat.');

@@ -190,7 +190,7 @@ e2e/
 │   ├── ffmpeg-mt.spec.ts      # Conversão real com FFmpeg MT
 │   ├── ffmpeg.spec.ts         # Conversão real com FFmpeg single-thread
 │   └── remux.spec.ts          # Conversão real com Remux
-├── test-options.spec.ts       # UI do Config Stack (renderização e interação)
+├── test-modifiers.spec.ts       # UI do Pilha de Modificadores (renderização e interação)
 └── test-user-file.spec.ts     # Fluxo completo de upload → conversão → download
 ```
 
@@ -232,14 +232,14 @@ test.describe('NomeDoModulo Conversions', () => {
 ### Padrão para Testes E2E de Opções
 
 ```typescript
-test.describe('Config Stack Options', () => {
+test.describe('Modifier Stack Modifiers', () => {
   test('renders and interacts with MinhaOpcao card', async ({ page }) => {
     await page.goto('/converter/mp4-para-webm');
     // Upload arquivo
     // ...
 
     // 1. Abrir picker de adição
-    await page.click('button:has-text("Adicionar Configuração")');
+    await page.click('button:has-text("Adicionar Modificador")');
 
     // 2. Buscar e adicionar categoria
     await page.fill('[placeholder*="Buscar"]', 'Minha Opção');
@@ -263,7 +263,7 @@ test.describe('Config Stack Options', () => {
 | Mudança | Teste Necessário |
 |---|---|
 | Novo módulo de conversão | Teste em `e2e/modules/<nome>.spec.ts` |
-| Nova opção no Config Stack | Teste em `e2e/test-options.spec.ts` |
+| Nova opção no Pilha de Modificadores | Teste em `e2e/test-modifiers.spec.ts` |
 | Alteração no fluxo de upload/download | Atualizar `e2e/test-user-file.spec.ts` |
 | Mudança apenas cosmética/CSS | Nenhum teste E2E necessário |
 
@@ -342,7 +342,7 @@ Se **qualquer** etapa falhar, o código NÃO deve ser merged/deployed.
 4. ✅ Teste E2E em `e2e/modules/<nome>.spec.ts`
 
 ### Quando adicionar uma nova opção:
-1. ✅ Teste E2E de renderização e interação em `e2e/test-options.spec.ts`
+1. ✅ Teste E2E de renderização e interação em `e2e/test-modifiers.spec.ts`
 2. ✅ Verificar que a opção é consumida corretamente via teste de módulo
 
 ### Quando adicionar um novo formato:

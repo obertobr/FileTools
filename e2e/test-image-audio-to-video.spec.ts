@@ -61,7 +61,7 @@ test.describe('Conversões Especiais e Regras de Contexto', () => {
     await expect(page.locator('text=sample.mkv')).toBeVisible({ timeout: 10_000 });
 
     // Adiciona Juntar Faixas de Áudio à pilha
-    await page.getByRole('button', { name: /Adicionar Configura/i }).click();
+    await page.getByRole('button', { name: /Adicionar Modificador/i }).click();
     await page.locator('div[role="button"]:has-text("Juntar Faixas de Áudio")').click();
 
     // Deve exibir o card de Juntar Faixas de Áudio e botões de ação
@@ -80,7 +80,7 @@ test.describe('Conversões Especiais e Regras de Contexto', () => {
     await expect(page.locator('text=sample.png')).toBeVisible({ timeout: 10_000 });
 
     // Abre seletor de categorias
-    await page.getByRole('button', { name: /Adicionar Configura/i }).click();
+    await page.getByRole('button', { name: /Adicionar Modificador/i }).click();
 
     // Não deve conter Faixas de Áudio nem Codec de Áudio
     await expect(page.locator('div[role="button"]:has-text("Faixas de Áudio")')).toHaveCount(0);

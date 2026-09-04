@@ -151,7 +151,7 @@ execute: async (inputs, context) => {
   const fileData = inputs.fileData as Uint8Array;
   const originalName = inputs.originalName as string;
   const targetFormat = inputs.targetFormat as string;
-  const options = (inputs.options as ConversionOptions) || undefined;
+  const modifiers = (inputs.modifiers as ConversionModifiers) || undefined;
 
   if (!fileData || !originalName || !targetFormat) {
     throw new Error('MeuModule requires fileData (Uint8Array), originalName, and targetFormat.');
@@ -172,7 +172,7 @@ execute: async (inputs, context) => {
   // ... (lógica específica do motor) ...
 
   // 5. LER OPÇÕES DO USUÁRIO (se aplicável)
-  //    NUNCA usar dados mockados. Sempre ler de `options` ou usar padrões sensatos.
+  //    NUNCA usar dados mockados. Sempre ler de `modifiers` ou usar padrões sensatos.
   if (options?.activeCategories?.includes('audio_tracks')) {
     context.onLog(`[MeuModule] Faixas de áudio selecionadas: [${options.selectedAudioTracks.join(', ')}]`);
   }
@@ -204,14 +204,14 @@ execute: async (inputs, context) => {
 | `fileData` | `Uint8Array` | `ConvertPanel.tsx` | Dados brutos do arquivo de entrada |
 | `originalName` | `string` | `ConvertPanel.tsx` | Nome original do arquivo (ex: `'video.mkv'`) |
 | `targetFormat` | `string` | `ConvertPanel.tsx` | Extensão de destino com ponto (ex: `'.mp4'`) |
-| `options` | `ConversionOptions` | `ConvertPanel.tsx` | Opções configuradas pelo usuário no Config Stack |
+| `modifiers` | `ConversionModifiers` | `ConvertPanel.tsx` | Opções configuradas pelo usuário no Pilha de Modificadores |
 | `userMaxThreads` | `number` (opcional) | `ConvertPanel.tsx` | Override manual de threads (quando `threadsMode === 'custom'`) |
 
 #### Regras do `execute`
 
 | Regra | Detalhe |
 |---|---|
-| **NUNCA mock data** | Não fabricar dados que deveriam vir de sondagem real (ex: faixas de áudio). Use sempre `options.probedMedia` ou probing real do container. |
+| **NUNCA mock data** | Não fabricar dados que deveriam vir de sondagem real (ex: faixas de áudio). Use sempre `modifiers.probedMedia` ou probing real do container. |
 | **Progresso granular** | Reportar progresso com frequência para a barra da UI. Para FFmpeg, parsear `time=` e `Duration:` dos logs. Para outros motores, estimar baseado em etapas. |
 | **Limpeza de memória** | Em caso de erro, garantir que buffers temporários e instâncias WASM sejam liberados (`finally` block). |
 | **Mensagens em PT-BR** | Logs e mensagens de progresso devem estar em português brasileiro. |
@@ -355,7 +355,7 @@ Antes de considerar o módulo completo, verificar **todos** os itens:
 |---|---|---|---|
 | Remux (Stream Copy) | [`src/modules/remux.ts`](../../src/modules/remux.ts) | Simples | Conversão mais básica possível (cópia de stream) |
 | FFmpeg WASM | [`src/modules/ffmpeg.ts`](../../src/modules/ffmpeg.ts) | Média | Single-thread, sem opções avançadas |
-| FFmpeg Multi-Thread | [`src/modules/ffmpeg-mt.ts`](../../src/modules/ffmpeg-mt.ts) | Complexa | Multi-thread, thread optimizer, Config Stack completo, probing de streams |
+| FFmpeg Multi-Thread | [`src/modules/ffmpeg-mt.ts`](../../src/modules/ffmpeg-mt.ts) | Complexa | Multi-thread, thread optimizer, Pilha de Modificadores completo, probing de streams |
 | ImageMagick WASM | [`src/modules/magick.ts`](../../src/modules/magick.ts) | Placeholder | Esqueleto mínimo (execute ainda não implementado) |
 
 ---

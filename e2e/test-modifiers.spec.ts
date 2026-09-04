@@ -19,10 +19,10 @@ test.describe('Pilha Modular Aberta, Detecção Real e Valores Customizáveis', 
     await expect(page.locator('text=sample.mkv')).toBeVisible({ timeout: 10_000 });
 
     // 1. Pilha já está aberta diretamente na tela
-    await expect(page.locator('text=Pilha de Configurações')).toBeVisible();
+    await expect(page.locator('text=Pilha de Modificadores')).toBeVisible();
 
     // 2. Adiciona Faixas de Legenda à pilha
-    await page.getByRole('button', { name: 'Adicionar Configuração' }).click();
+    await page.getByRole('button', { name: 'Adicionar Modificador' }).click();
     await page.locator('div[role="button"]').filter({ hasText: 'Legenda' }).click();
 
     // Verifica que detectou que o arquivo NÃO tem legendas e NÃO exibe legendas falsas
@@ -30,7 +30,7 @@ test.describe('Pilha Modular Aberta, Detecção Real e Valores Customizáveis', 
     await expect(page.locator('text=Legenda 1')).toHaveCount(0);
 
     // 3. Adiciona Faixas de Áudio à pilha
-    await page.getByRole('button', { name: 'Adicionar Configuração' }).click();
+    await page.getByRole('button', { name: 'Adicionar Modificador' }).click();
     await page.locator('div[role="button"]').filter({ hasText: 'Faixas de' }).filter({ hasNotText: 'Juntar' }).filter({ hasNotText: 'Legenda' }).click();
 
     // sample.mkv tem APENAS 1 faixa de áudio real. NÃO pode existir dados mockados (Faixa 2, Faixa 3, Faixa 4)!
@@ -53,12 +53,12 @@ test.describe('Pilha Modular Aberta, Detecção Real e Valores Customizáveis', 
     // 1. Card separado de FPS fixado na pilha
     const fpsCard = page.locator('.space-y-2\\.5 > div').filter({ hasText: 'Taxa de Quadros (FPS)' }).first();
     await expect(fpsCard).toBeVisible();
-    await expect(fpsCard.locator('button[title="Remover configuração da pilha"]')).toHaveCount(0);
+    await expect(fpsCard.locator('button[title="Remover modificador da pilha"]')).toHaveCount(0);
 
     // 2. Card separado de Resolução e Escala fixado na pilha
     const resCard = page.locator('.space-y-2\\.5 > div').filter({ hasText: 'Resolução e Escala' }).first();
     await expect(resCard).toBeVisible();
-    await expect(resCard.locator('button[title="Remover configuração da pilha"]')).toHaveCount(0);
+    await expect(resCard.locator('button[title="Remover modificador da pilha"]')).toHaveCount(0);
 
     // 3. Testa FPS personalizado
     await fpsCard.getByRole('button', { name: 'Custom', exact: true }).click();

@@ -17,8 +17,8 @@ test.describe('Juntar Faixas de Áudio (Audio Merge) e Gestão Contextual', () =
     await fileInput.setInputFiles(path.join(fixturesDir, 'sample.mp4'));
     await expect(page.locator('text=sample.mp4')).toBeVisible({ timeout: 10_000 });
 
-    // Click on "Adicionar Configuração"
-    const addBtn = page.getByRole('button', { name: /Adicionar Configura/i });
+    // Click on "Adicionar Modificador"
+    const addBtn = page.getByRole('button', { name: /Adicionar Modificador/i });
     await expect(addBtn).toBeVisible();
     await addBtn.click();
 
@@ -30,10 +30,10 @@ test.describe('Juntar Faixas de Áudio (Audio Merge) e Gestão Contextual', () =
     const tracksOption = page.locator('div[role="button"]:has-text("Faixas de Áudio")').filter({ hasNotText: 'Juntar' });
     await expect(tracksOption).toHaveCount(0);
 
-    // Add "Juntar Faixas de Áudio" to the options stack
+    // Add "Juntar Faixas de Áudio" to the modifiers stack
     await mergeOption.click();
 
-    // The card "Juntar Faixas de Áudio" should now be visible in the options stack
+    // The card "Juntar Faixas de Áudio" should now be visible in the modifiers stack
     await expect(page.getByText('Juntar Faixas de Áudio').first()).toBeVisible();
 
     // Quick action buttons should be visible
@@ -67,7 +67,7 @@ test.describe('Juntar Faixas de Áudio (Audio Merge) e Gestão Contextual', () =
     await fileInput.setInputFiles(path.join(fixturesDir, 'sample.mkv'));
     await expect(page.locator('text=sample.mkv')).toBeVisible({ timeout: 10_000 });
 
-    const addBtn = page.getByRole('button', { name: /Adicionar Configura/i });
+    const addBtn = page.getByRole('button', { name: /Adicionar Modificador/i });
     await expect(addBtn).toBeVisible();
     await addBtn.click();
 
@@ -91,7 +91,7 @@ test.describe('Juntar Faixas de Áudio (Audio Merge) e Gestão Contextual', () =
     await expect(page.locator('text=sample.mp4')).toBeVisible({ timeout: 10_000 });
 
     // Add "Juntar Faixas de Áudio"
-    await page.getByRole('button', { name: /Adicionar Configura/i }).click();
+    await page.getByRole('button', { name: /Adicionar Modificador/i }).click();
     const mergeOption = page.locator('div[role="button"]:has-text("Juntar Faixas de Áudio")');
     await mergeOption.click();
 

@@ -4,10 +4,10 @@ import fs from 'fs';
 import path from 'path';
 import { probeMediaData } from './mediaProbe';
 import {
-  isCategoryIncompatibleWithEngine,
+  isModifierIncompatibleWithEngine,
   checkEngineCompatibility,
 } from '@/modules/engineCapabilities';
-import type { ConversionOptions } from '@/shared/types/conversionOptions';
+import type { ConversionModifiers } from '@/shared/types/conversionModifiers';
 
 describe('Media Probe & Container Support', () => {
   const fixturesDir = path.resolve(process.cwd(), 'tests/fixtures');
@@ -141,23 +141,23 @@ describe('Media Probe & Container Support', () => {
   });
 
   it('detects stream-copy incompatibility with transcoding options', () => {
-    expect(isCategoryIncompatibleWithEngine('fps', 'stream-copy')).toBe(true);
-    expect(isCategoryIncompatibleWithEngine('resolution', 'stream-copy')).toBe(true);
-    expect(isCategoryIncompatibleWithEngine('quality', 'stream-copy')).toBe(true);
-    expect(isCategoryIncompatibleWithEngine('video_codec', 'stream-copy')).toBe(true);
-    expect(isCategoryIncompatibleWithEngine('audio_merge', 'stream-copy')).toBe(true);
+    expect(isModifierIncompatibleWithEngine('fps', 'stream-copy')).toBe(true);
+    expect(isModifierIncompatibleWithEngine('resolution', 'stream-copy')).toBe(true);
+    expect(isModifierIncompatibleWithEngine('quality', 'stream-copy')).toBe(true);
+    expect(isModifierIncompatibleWithEngine('video_codec', 'stream-copy')).toBe(true);
+    expect(isModifierIncompatibleWithEngine('audio_merge', 'stream-copy')).toBe(true);
 
     // Threads or audio_tracks are not incompatible
-    expect(isCategoryIncompatibleWithEngine('threads', 'stream-copy')).toBe(false);
-    expect(isCategoryIncompatibleWithEngine('audio_tracks', 'stream-copy')).toBe(false);
+    expect(isModifierIncompatibleWithEngine('threads', 'stream-copy')).toBe(false);
+    expect(isModifierIncompatibleWithEngine('audio_tracks', 'stream-copy')).toBe(false);
 
     // Transcoder engines (ffmpeg) are compatible with all options
-    expect(isCategoryIncompatibleWithEngine('fps', 'ffmpeg-core-mt')).toBe(false);
-    expect(isCategoryIncompatibleWithEngine('fps', 'ffmpeg-core')).toBe(false);
+    expect(isModifierIncompatibleWithEngine('fps', 'ffmpeg-core-mt')).toBe(false);
+    expect(isModifierIncompatibleWithEngine('fps', 'ffmpeg-core')).toBe(false);
   });
 
   it('validates active options against stream-copy engine', () => {
-    const options: ConversionOptions = {
+    const options: ConversionModifiers = {
       activeCategories: ['fps', 'resolution'],
       selectedAudioTracks: [0],
       selectedSubtitleTracks: [],

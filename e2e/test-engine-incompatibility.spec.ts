@@ -21,7 +21,7 @@ test.describe('Compatibilidade de Motores, Metadados Nativos e Bloqueio de Conve
     await expect(page.locator('text=Remux Direto (Cópia Sem Perdas)')).toBeVisible();
 
     // 3. Abrir o picker de opções
-    await page.getByRole('button', { name: /Adicionar Configura/i }).click();
+    await page.getByRole('button', { name: /Adicionar Modificador/i }).click();
 
     // 4. Verificar se no picker a opção "Taxa de Quadros (FPS)" possui indicador "não compatível com o motor selecionado"
     const fpsOptionInPicker = page.locator('div[role="button"]').filter({ hasText: 'Taxa de Quadros (FPS)' }).first();
@@ -33,7 +33,7 @@ test.describe('Compatibilidade de Motores, Metadados Nativos e Bloqueio de Conve
 
     // 6. Verificar que a taxa de quadros renomeou o preset para "Original (30 fps)"
     await expect(page.getByRole('button', { name: /Original \(30 fps\)/ })).toBeVisible();
-    // E que no card da configuração aparece o badge vermelho "não compatível com o motor selecionado"
+    // E que no card do modificador aparece o badge vermelho "não compatível com o motor selecionado"
     await expect(page.locator('text=não compatível com o motor selecionado').first()).toBeVisible();
 
     // 7. Verificar que no motor ativo aparece a indicação vermelha "não é compatível"
@@ -86,7 +86,7 @@ test.describe('Compatibilidade de Motores, Metadados Nativos e Bloqueio de Conve
     await expect(page.locator('text=sample_1080p.mkv')).toBeVisible({ timeout: 10_000 });
 
     // Adicionar Resolução
-    await page.getByRole('button', { name: /Adicionar Configura/i }).click();
+    await page.getByRole('button', { name: /Adicionar Modificador/i }).click();
     const resOption = page.locator('div[role="button"]').filter({ hasText: 'Resolução e Escala' }).first();
     await expect(resOption.locator('text=não compatível com o motor selecionado')).toBeVisible();
     await resOption.click();
@@ -109,7 +109,7 @@ test.describe('Compatibilidade de Motores, Metadados Nativos e Bloqueio de Conve
     await expect(page.locator('text=sample.mkv')).toBeVisible({ timeout: 10_000 });
 
     // Adicionar Taxa de Quadros
-    await page.getByRole('button', { name: /Adicionar Configura/i }).click();
+    await page.getByRole('button', { name: /Adicionar Modificador/i }).click();
     await page.locator('div[role="button"]').filter({ hasText: 'Taxa de Quadros (FPS)' }).first().click();
 
     // Alternar para FFmpeg Multi-Thread no EngineSelector

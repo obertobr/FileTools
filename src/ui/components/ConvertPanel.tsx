@@ -6,14 +6,14 @@ import { SearchInput } from './SearchInput';
 import { CategoryFilter } from './CategoryFilter';
 import { FormatSelector } from './FormatSelector';
 import { EngineSelector } from './EngineSelector';
-import { ConversionOptionsPanel } from './ConversionOptionsPanel';
+import { ConversionModifiersPanel } from './ConversionModifiersPanel';
 import { ConversionProgress } from './ConversionProgress';
 import { DownloadResult } from './DownloadResult';
 import { Button, Card, Typography } from '@/ui/components/core';
 import { FORMATS, describeFile, type Format } from '@/lib/formats';
 import { resolvePossibleConversions, resolveAvailableEngines, type EngineOption } from '@/modules/registry';
 import { WorkerManager } from '@/core/engine/WorkerManager';
-import { type ConversionOptions, DEFAULT_CONVERSION_OPTIONS } from '@/shared/types/conversionOptions';
+import { type ConversionModifiers, DEFAULT_CONVERSION_MODIFIERS } from '@/shared/types/conversionModifiers';
 import { probeMediaData, probeWithBrowser, type MediaProbeResult } from '@/core/media/mediaProbe';
 import { checkEngineCompatibility } from '@/modules/engineCapabilities';
 
@@ -34,7 +34,7 @@ export function ConvertPanel({
   const [selected, setSelected] = useState<string | null>(fixedTarget ?? null);
   const [availableEngines, setAvailableEngines] = useState<EngineOption[]>([]);
   const [selectedEngineId, setSelectedEngineId] = useState<string | null>(null);
-  const [conversionOptions, setConversionOptions] = useState<ConversionOptions>(DEFAULT_CONVERSION_OPTIONS);
+  const [conversionModifiers, setConversionModifiers] = useState<ConversionModifiers>(DEFAULT_CONVERSION_MODIFIERS);
   const [probedMedia, setProbedMedia] = useState<MediaProbeResult | undefined>();
   const [status, setStatus] = useState<Status>('idle');
   const [progress, setProgress] = useState(0);
@@ -140,7 +140,7 @@ export function ConvertPanel({
       if (!isCurrent) return;
 
       setProbedMedia(finalResult);
-      setConversionOptions((prev) => ({
+      setConversionModifiers((prev) => ({
         ...prev,
         probedMedia: finalResult,
         customFps: finalResult.fps ? finalResult.fps : prev.customFps,
@@ -160,14 +160,14 @@ export function ConvertPanel({
 
   // Engine compatibility check with active options
   const engineCompatibility = useMemo(() => {
-    return checkEngineCompatibility(activeEngine?.moduleId, conversionOptions);
-  }, [activeEngine?.moduleId, conversionOptions]);
+    return checkEngineCompatibility(activeEngine?.moduleId, conversionModifiers);
+  }, [activeEngine?.moduleId, conversionModifiers]);
 
   const incompatibleEngineIds = useMemo(() => {
     return availableEngines
-      .filter((e) => checkEngineCompatibility(e.moduleId, conversionOptions).isIncompatible)
+      .filter((e) => checkEngineCompatibility(e.moduleId, conversionModifiers).isIncompatible)
       .map((e) => e.moduleId);
-  }, [availableEngines, conversionOptions]);
+  }, [availableEngines, conversionModifiers]);
 
   function reset() {
     setFile(null);
@@ -180,7 +180,7 @@ export function ConvertPanel({
     setErrorMessage('');
     setFailedEngineName('');
     setSelectedEngineId(null);
-    setConversionOptions(DEFAULT_CONVERSION_OPTIONS);
+    setConversionModifiers(DEFAULT_CONVERSION_MODIFIERS);
     if (outputUrl) URL.revokeObjectURL(outputUrl);
     setOutputUrl(null);
     setOutputSize(0);
@@ -196,7 +196,7 @@ export function ConvertPanel({
     if (!engineToUse) return;
 
     // Guard against running conversion with incompatible options
-    const comp = checkEngineCompatibility(engineToUse.moduleId, conversionOptions);
+    const comp = checkEngineCompatibility(engineToUse.moduleId, conversionModifiers);
     if (comp.isIncompatible) {
       setErrorMessage(comp.reason);
       setFailedEngineName(engineToUse.moduleName);
@@ -225,8 +225,8 @@ export function ConvertPanel({
           fileData: fileData,
           targetFormat: '.' + target.replace(/^\.+/, '').toLowerCase(),
           originalName: file.name,
-          options: conversionOptions,
-          userMaxThreads: conversionOptions.threadsMode === 'custom' ? conversionOptions.userMaxThreads : undefined,
+          options: conversionModifiers,
+          userMaxThreads: conversionModifiers.threadsMode === 'custom' ? conversionModifiers.userMaxThreads : undefined,
         },
         (p, msg) => {
           setProgress(p);
@@ -305,11 +305,11 @@ export function ConvertPanel({
             incompatibleEngineIds={incompatibleEngineIds}
           />
 
-          <ConversionOptionsPanel
+          <ConversionModifiersPanel
             targetFormat={target}
             sourceExt={sourceExt ?? undefined}
-            options={conversionOptions}
-            onChange={setConversionOptions}
+            modifiers={conversionModifiers}
+            onChange={setConversionModifiers}
             isMultiThreadEngine={activeEngine?.acceleration === 'cpu-multithread'}
             probedMedia={probedMedia}
             selectedEngineId={activeEngine?.moduleId ?? null}

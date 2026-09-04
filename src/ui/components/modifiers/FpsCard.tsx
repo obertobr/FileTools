@@ -1,12 +1,12 @@
 import React from 'react';
 import { Typography } from '@/ui/components/core';
 import { cn } from '@/lib/utils';
-import type { ConversionOptions } from '@/shared/types/conversionOptions';
+import type { ConversionModifiers } from '@/shared/types/conversionModifiers';
 import type { MediaProbeResult } from '@/core/media/mediaProbe';
 
 export interface FpsCardProps {
-  options: ConversionOptions;
-  onChange: (updated: Partial<ConversionOptions>) => void;
+  options: ConversionModifiers;
+  onChange: (updated: Partial<ConversionModifiers>) => void;
   targetFormat?: string;
   probedMedia?: MediaProbeResult;
 }

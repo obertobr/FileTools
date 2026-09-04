@@ -1,13 +1,13 @@
 /**
- * src/shared/types/conversionOptions.ts
+ * src/shared/types/conversionModifiers.ts
  *
- * Strongly-typed options for media conversion.
+ * Strongly-typed modifiers for media conversion (Modifier Stack).
  * Zero mock data: real probed streams, unified modular stack.
  */
 
 import type { MediaProbeResult } from '@/core/media/mediaProbe';
 
-export type ConfigCategoryId =
+export type ModifierCategoryId =
   | 'fps'
   | 'resolution'
   | 'audio_tracks'
@@ -44,9 +44,9 @@ export type AudioCodecChoice =
   | 'ac3'
   | 'copy';
 
-export interface ConversionOptions {
-  // Stack of active categories
-  activeCategories: ConfigCategoryId[];
+export interface ConversionModifiers {
+  // Stack of active modifier categories
+  activeCategories: ModifierCategoryId[];
 
   // Audio Tracks (Multi-select for video output, or merge selection for audio output)
   selectedAudioTracks: number[];
@@ -89,7 +89,7 @@ export interface ConversionOptions {
   probedMedia?: MediaProbeResult;
 }
 
-export const DEFAULT_CONVERSION_OPTIONS: ConversionOptions = {
+export const DEFAULT_CONVERSION_MODIFIERS: ConversionModifiers = {
   activeCategories: [],
   selectedAudioTracks: [],
   selectedSubtitleTracks: [],

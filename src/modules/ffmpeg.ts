@@ -7,7 +7,7 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL } from '@ffmpeg/util';
 import type { IModule, ExecutionContext } from '../shared/types/module';
-import type { ConversionOptions } from '../shared/types/conversionOptions';
+import type { ConversionModifiers } from '../shared/types/conversionModifiers';
 import { categoryOfExtension } from '../lib/formats';
 
 let ffmpegInstance: FFmpeg | null = null;
@@ -100,7 +100,7 @@ async function getFFmpeg(context: ExecutionContext): Promise<FFmpeg> {
   return ffmpegInstance;
 }
 
-function getConversionArgs(inputExt: string, outputExt: string, options?: ConversionOptions): string[] {
+function getConversionArgs(inputExt: string, outputExt: string, options?: ConversionModifiers): string[] {
   const from = inputExt.toLowerCase();
   const to = outputExt.toLowerCase();
 
@@ -529,7 +529,7 @@ export const FFmpegModule: IModule = {
     const fileData = inputs.fileData as Uint8Array;
     const originalName = inputs.originalName as string;
     const targetFormat = inputs.targetFormat as string;
-    const options = (inputs.options as ConversionOptions) || undefined;
+    const options = (inputs.modifiers as ConversionModifiers) || (inputs.options as ConversionModifiers) || undefined;
 
     if (!fileData || !originalName || !targetFormat) {
       throw new Error('FFmpeg module requires fileData (Uint8Array), originalName, and targetFormat.');
