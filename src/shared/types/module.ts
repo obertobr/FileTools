@@ -1,4 +1,4 @@
-﻿/**
+/**
  * src/shared/types/module.ts
  *
  * Core type contracts for the FileTools module system.
@@ -7,6 +7,8 @@
  *
  * Source of truth: docs/protocols/module-contract.md
  */
+
+import type { ModifierCategoryId } from '@/shared/types/conversionModifiers';
 
 export type DataType = 'file_handle' | 'string' | 'number' | 'boolean' | 'enum';
 
@@ -46,6 +48,11 @@ export interface ModuleManifest {
   category: 'video' | 'audio' | 'document' | 'image';
   /** Used for dynamic UI generation and SSG SEO route compilation */
   supportedConversions: ConversionRule[];
+  /**
+   * Modificadores da Pilha de Modificadores (Modifier Stack) que este motor suporta aplicar.
+   * Modificadores omitidos são considerados incompatíveis pelo orquestrador, alertando na UI.
+   */
+  supportedModifiers?: ModifierCategoryId[];
   inputs: PortDefinition[];
   outputs: PortDefinition[];
 }

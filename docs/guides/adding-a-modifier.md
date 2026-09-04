@@ -50,7 +50,7 @@ ConvertPanel.tsx                          -> Estado: ConversionModifiers (conver
 | 2 | `src/ui/components/modifiers/ModifierDefinitions.ts` | **MODIFICAR** — Adicionar definição do modificador (título, ícone, aplicabilidade semântica) |
 | 3 | `src/ui/components/modifiers/MeuModificadorCard.tsx` | **CRIAR** — Componente do card com controles, feedback visual e acessibilidade |
 | 4 | `src/ui/components/ConversionModifiersPanel.tsx` | **MODIFICAR** — Importar card, adicionar à renderização e ao reset ao remover |
-| 5 | `src/modules/engineCapabilities.ts` | **MODIFICAR** — Definir se o modificador é incompatível com algum motor (ex: Remux) |
+| 5 | `src/modules/<motor>.ts` | **DECLARAR** — Adicionar ID ao `supportedModifiers` nos motores compatíveis (IoC) |
 | 6 | `src/modules/ffmpeg-mt.ts` e `ffmpeg.ts` | **MODIFICAR** — Ler `inputs.modifiers` e injetar flags de linha de comando ou filtros |
 | 7 | `e2e/test-modifiers.spec.ts` | **CRIAR/ATUALIZAR** — Teste E2E cobrindo adição, interação e remoção do modificador |
 
@@ -185,16 +185,29 @@ if (catId === 'meu_modificador') {
 
 ---
 
-## Passo 5: Declarar Incompatibilidade de Motores (se aplicável)
+## Passo 5: Declarar Suporte nos Motores (Inversão de Controle)
 
-Edite [`src/modules/engineCapabilities.ts`](../../src/modules/engineCapabilities.ts).
+Diferente de sistemas com orquestradores frágeis cheios de `if/else` hardcoded, o FileTools adota **Inversão de Controle (IoC)**: as capacidades de suporte a modificadores pertencem diretamente ao manifesto de cada motor (`ModuleManifest.supportedModifiers`).
 
-Se o modificador exige transcodificação (ex: não funciona com Remux direto):
+O orquestrador central (`src/modules/engineCapabilities.ts`) consulta diretamente o manifesto do motor selecionado:
 ```typescript
-if (engineId === 'stream-copy' && catId === 'meu_modificador') {
-  return true; // Incompatível com Remux
+return !engine.manifest.supportedModifiers.includes(modifierId);
+```
+
+Por isso, você **NÃO precisa alterar o `engineCapabilities.ts`**. Para que um motor seja compatível com seu novo modificador, basta incluir o ID no array `supportedModifiers` do módulo correspondente (ex: `src/modules/ffmpeg-mt.ts`):
+
+```typescript
+manifest: {
+  id: 'ffmpeg-core-mt',
+  // ...
+  supportedModifiers: [
+    // ... modificadores existentes ...
+    'meu_modificador',
+  ],
 }
 ```
+
+Se um motor (como o Remux direto `src/modules/remux.ts`) NÃO declarar o seu modificador no array `supportedModifiers`, o orquestrador automaticamente saberá que ele é incompatível, exibirá o alerta em vermelho na UI e desabilitará o botão de conversão incorreta.
 
 ---
 

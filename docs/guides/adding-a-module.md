@@ -65,6 +65,8 @@ manifest: {
   // Categoria: determina agrupamento na UI. Valores permitidos:
   // 'video' | 'audio' | 'document' | 'image'
   category: 'video',
+    // Modificadores que este motor suporta aplicar na conversão (Inversão de Controle)
+    supportedModifiers: ['video_codec', 'audio_codec', 'quality', 'fps', 'resolution', 'threads'],
 
   // Regras de conversão: quais pares from→to este motor suporta.
   supportedConversions: [

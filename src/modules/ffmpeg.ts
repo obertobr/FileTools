@@ -463,6 +463,18 @@ export const FFmpegModule: IModule = {
     version: '0.12.10',
     description: 'Motor de conversão de mídia local em CPU single-thread com alta compatibilidade.',
     category: 'video',
+    supportedModifiers: [
+      'video_codec',
+      'audio_codec',
+      'quality',
+      'fps',
+      'resolution',
+      'threads',
+      'audio_tracks',
+      'audio_merge',
+      'subtitles',
+      'video_duration',
+    ],
     supportedConversions: [
       {
         from: ['audio/*'],

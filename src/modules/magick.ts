@@ -7,6 +7,7 @@ export const MagickModule: IModule = {
     version: '0.0.43',
     description: 'Conversor universal de imagens.',
     category: 'image',
+    supportedModifiers: ['quality', 'resolution'],
     supportedConversions: [
       { from: ['.png', '.jpg', '.jpeg', '.webp', '.tiff', '.heic', '.avif'], to: ['.jpg', '.png', '.webp', '.tiff', '.avif'], lossy: true },
     ],

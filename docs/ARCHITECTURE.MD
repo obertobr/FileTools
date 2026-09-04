@@ -189,7 +189,13 @@ O sistema de opções avançadas (Pilha de Modificadores (Modifier Stack)) obede
 | **Subtítulos Embutidos** | ✅ Suportado | ✅ Total | ✅ Total |
 | **Duração Imagem -> Vídeo** | ❌ Incompatível | ✅ Total | ✅ Total |
 
-### 12.2. Contrato de Proteção ao Usuário (UX Guard)
+
+### 12.2. Inversão de Controle no ModuleManifest (`supportedModifiers`)
+1. **Responsabilidade Descentralizada:** Cada motor declara exclusivamente em seu próprio manifesto (`ModuleManifest.supportedModifiers`) a lista de modificadores que suporta executar.
+2. **Orquestrador Puro:** O módulo `src/modules/engineCapabilities.ts` não possui nenhum `if/else` com nomes de motores hardcoded. A verificação é uma consulta pura de inclusão no array de capacidades do motor.
+3. **UX Guard Integrado:** Se o usuário acionar um modificador não suportado pelo motor ativo (ex: alterar FPS enquanto o motor selecionado é o Remux direto), a UI exibe o aviso em vermelho e desabilita a conversão, prevenindo execuções silenciosas incorretas.
+
+### 12.3. Contrato de Proteção ao Usuário (UX Guard)
 1. **Detecção de Conflito**: O módulo `src/modules/engineCapabilities.ts` avalia em tempo real (`checkEngineCompatibility`) as opções ativas contra as capacidades do motor selecionado.
 2. **Prevenção de Execução Silenciosa Falha**: Caso o motor atual não suporte aplicar as alterações solicitadas, a conversão é bloqueada na UI com indicação clara do motivo e botão de alternância imediata para o motor transcodificador compatível.
 3. **Extração e Fidelidade de Metadados**: O probe binário nativo (`src/core/media/mediaProbe.ts`) garante que framerate e dimensões sejam populados a partir do arquivo real do usuário, eliminando defaults arbitrários.

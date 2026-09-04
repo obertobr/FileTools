@@ -168,8 +168,8 @@ describe('Media Probe & Container Support', () => {
 
     const res = checkEngineCompatibility('stream-copy', options);
     expect(res.isIncompatible).toBe(true);
-    expect(res.incompatibleCategories).toContain('fps');
-    expect(res.incompatibleCategories).toContain('resolution');
+    expect(res.incompatibleModifiers).toContain('fps');
+    expect(res.incompatibleModifiers).toContain('resolution');
     expect(res.recommendedEngineId).toBe('ffmpeg-core-mt');
 
     // With compatible engine

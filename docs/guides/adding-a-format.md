@@ -30,7 +30,7 @@ Se um par existe no `CONVERTERS` mas nenhum módulo o suporta em `supportedConve
 
 | # | Arquivo | Ação |
 |---|---|---|
-| 1 | `src/lib/formats.ts` | **MODIFICAR** — Adicionar formato em `FORMATS` e/ou converter em `CONVERTERS` |
+| 1 | `src/lib/formats.ts` | **MODIFICAR** — Adicionar formato ao array `FORMATS` |
 | 2 | `src/modules/<modulo>.ts` | **VERIFICAR** — Confirmar que o módulo suporta o par no `supportedConversions` |
 | 3 | `src/modules/registry.test.ts` | **MODIFICAR** — Adicionar teste de resolução |
 

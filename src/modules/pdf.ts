@@ -7,6 +7,7 @@ export const PdfModule: IModule = {
     version: '1.17.1',
     description: 'Ferramentas de conversão de e para PDF.',
     category: 'document',
+    supportedModifiers: [],
     supportedConversions: [
       { from: ['.jpg', '.jpeg', '.png'], to: ['.pdf'], lossy: false },
       // To implement PDF -> JPG/PNG we would actually need pdf.js or ghostscript.

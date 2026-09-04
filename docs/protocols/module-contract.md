@@ -56,7 +56,30 @@ export interface CapabilityCheckContext {
 }
 ```
 
-### 2.3. A Interface `IModule`
+
+### 2.3. O Manifesto do Módulo (`ModuleManifest`)
+
+```typescript
+export interface ModuleManifest {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  category: 'video' | 'audio' | 'document' | 'image';
+  /** Regras de conversão suportadas (usadas na resolução dinâmica de rotas e catálogo) */
+  supportedConversions: ConversionRule[];
+  /**
+   * Modificadores da Pilha de Modificadores (Modifier Stack) que este motor suporta aplicar.
+   * Inversão de Controle (IoC): O motor declara explicitamente suas capacidades.
+   * Modificadores omitidos são considerados incompatíveis pelo orquestrador, alertando na UI.
+   */
+  supportedModifiers?: ModifierCategoryId[];
+  inputs: PortDefinition[];
+  outputs: PortDefinition[];
+}
+```
+
+### 2.4. A Interface `IModule`
 
 ```typescript
 export interface IModule {
@@ -101,3 +124,16 @@ Conforme a diretriz de transparência técnica do FileTools:
    - A interface (`ConvertPanel.tsx`) indica claramente:
      `"Falha na conversão com o motor {Nome do Motor}"`
    - O sistema lista diretamente no cartão de erro os outros motores compatíveis disponíveis (ex: `[🚀 Usar FFmpeg Multi-Thread]`, `[💻 Usar FFmpeg WASM]`), conferindo total controle de decisão ao usuário.
+
+---
+
+## 5. Inversão de Controle: Capacidades de Modificadores no Manifesto
+
+Para evitar orquestradores centrais com acoplamento indevido e listas hardcoded de `if/else`, a capacidade de aplicar modificadores da **Pilha de Modificadores (Modifier Stack)** pertence exclusivamente a cada motor:
+
+1. **Declaração no Manifesto:** Cada motor declara no array `supportedModifiers` exatamente os modificadores que ele é capaz de honrar durante o processamento (ex: `['audio_tracks', 'subtitles']` para cópia direta de stream; ou a lista completa de transcodificação para FFmpeg).
+2. **Orquestrador Isento de Regras Hardcoded:** A verificação de compatibilidade em `src/modules/engineCapabilities.ts` é uma função pura e direta:
+   ```typescript
+   return !moduleInstance.manifest.supportedModifiers.includes(modifierId);
+   ```
+3. **Escalabilidade Garantida:** Motores e modificadores futuros podem ser criados sem que seja necessário tocar no orquestrador central.

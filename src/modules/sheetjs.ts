@@ -8,6 +8,7 @@ export const SheetJSModule: IModule = {
     version: '0.18.5',
     description: 'Conversor local e ultrarrápido de planilhas Excel (XLSX, XLS, ODS, CSV, JSON).',
     category: 'document',
+    supportedModifiers: [],
     supportedConversions: [
       { from: ['.xlsx', '.xls', '.ods'], to: ['.csv', '.json'], lossy: true, speedScore: 95 },
       { from: ['.csv'], to: ['.xlsx', '.json'], lossy: false, speedScore: 95 },

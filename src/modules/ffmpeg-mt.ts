@@ -527,6 +527,18 @@ export const FFmpegMTModule: IModule = {
     version: '0.12.10',
     description: 'Conversão acelerada de áudio e vídeo utilizando múltiplos núcleos da CPU (multi-thread).',
     category: 'video',
+    supportedModifiers: [
+      'video_codec',
+      'audio_codec',
+      'quality',
+      'fps',
+      'resolution',
+      'threads',
+      'audio_tracks',
+      'audio_merge',
+      'subtitles',
+      'video_duration',
+    ],
     supportedConversions: [
       {
         from: ['audio/*'],

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { SearchInput } from '@/ui/components/SearchInput';
 import { CategoryFilter } from '@/ui/components/CategoryFilter';
 import { ConverterGrid } from '@/ui/components/ConverterGrid';
-import { CONVERTERS } from '@/lib/formats';
+import { CONVERTERS } from '@/lib/converters';
 
 /**
  * ConverterCatalog — React island for the /converter catalog page.

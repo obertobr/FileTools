@@ -49,6 +49,7 @@ export const RemuxModule: IModule = {
     version: '1.0.0',
     description: 'Copia os fluxos de vídeo e áudio diretamente para o novo contêiner sem re-encodificar. Instantâneo (< 1s) e com 0% de perda de qualidade.',
     category: 'video',
+    supportedModifiers: ['audio_tracks', 'subtitles', 'threads'],
     supportedConversions: [
       {
         from: ['.mkv', '.mp4', '.mov', '.m4v'],

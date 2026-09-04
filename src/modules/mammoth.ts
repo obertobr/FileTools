@@ -7,6 +7,7 @@ export const MammothModule: IModule = {
     version: '1.12.2',
     description: 'Extrator de texto e HTML de arquivos DOCX.',
     category: 'document',
+    supportedModifiers: [],
     supportedConversions: [
       { from: ['.docx'], to: ['.txt', '.html'], lossy: true },
     ],

@@ -1,46 +1,15 @@
-﻿---
+---
 import Layout from '@/layouts/Layout.astro';
 import { ConvertPanel } from '@/ui/components/ConvertPanel';
-import { getAllManifests } from '@/modules/registry';
-import { FORMATS } from '@/lib/formats';
+import { CONVERTERS } from '@/lib/converters';
 
 export async function getStaticPaths() {
-  const manifests = getAllManifests();
-  const paths: { params: { from: string; to: string } }[] = [];
-
-  for (const manifest of manifests) {
-    for (const rule of manifest.supportedConversions) {
-      for (const fromType of rule.from) {
-        let validFroms: string[] = [];
-        
-        if (fromType.includes('*')) {
-          // Extract category: 'video/*' -> 'video', 'audio/*' -> 'audio'
-          const category = fromType.split('/')[0].toLowerCase();
-          validFroms = FORMATS
-            .filter(f => f.category === category)
-            .map(f => f.ext.toLowerCase().replace('.', ''));
-        } else {
-          validFroms = [fromType.toLowerCase().replace('.', '')];
-        }
-
-        for (const from of validFroms) {
-          for (const toExt of rule.to) {
-            const to = toExt.toLowerCase().replace('.', '');
-            if (from !== to) {
-              paths.push({
-                params: { from, to },
-              });
-            }
-          }
-        }
-      }
-    }
-  }
-
-  const uniquePaths = Array.from(
-    new Map(paths.map((p) => [`${p.params.from}-${p.params.to}`, p])).values()
-  );
-  return uniquePaths;
+  return CONVERTERS.map((c) => ({
+    params: {
+      from: c.from.toLowerCase(),
+      to: c.to.toLowerCase(),
+    },
+  }));
 }
 
 const { from, to } = Astro.params;

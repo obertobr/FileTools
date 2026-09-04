@@ -38,6 +38,7 @@ export const WebCodecsModule: IModule = {
     version: '1.0.0',
     description: 'Transcodificação de alta velocidade com aceleração por hardware na GPU (NVENC, QuickSync, Apple Silicon).',
     category: 'video',
+    supportedModifiers: ['video_codec', 'quality', 'fps', 'resolution'],
     supportedConversions: [
       {
         // MP4Box is specifically an ISO Base Media File Format parser (MP4 / M4V)

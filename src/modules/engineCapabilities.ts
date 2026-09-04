@@ -5,17 +5,19 @@
  * Determines whether a conversion engine can execute a conversion
  * with the currently requested modifiers (e.g. framerate, resolution scaling,
  * quality presets, codec changes, audio mixing).
+ *
+ * Inversion of Control (IoC):
+ * Capabilities belong to each module's ModuleManifest.supportedModifiers.
+ * This file contains zero hardcoded engine rules.
  */
 
 import type { ModifierCategoryId, ConversionModifiers } from '@/shared/types/conversionModifiers';
+import { getModuleById } from '@/modules/registry';
 
 export interface EngineIncompatibilityResult {
   isIncompatible: boolean;
   incompatibleModifiers: ModifierCategoryId[];
   incompatibleModifierNames: string[];
-  // Compatibility aliases
-  incompatibleCategories: ModifierCategoryId[];
-  incompatibleCategoryNames: string[];
   reason: string;
   recommendedEngineId?: string;
   recommendedEngineName?: string;
@@ -34,11 +36,9 @@ export const MODIFIER_LABELS: Record<ModifierCategoryId, string> = {
   threads: 'Desempenho / CPU',
 };
 
-// Compatibility export
-export const CATEGORY_LABELS = MODIFIER_LABELS;
-
 /**
  * Checks if an individual modifier category is incompatible with an engine.
+ * Directly queries the engine's ModuleManifest.supportedModifiers.
  */
 export function isModifierIncompatibleWithEngine(
   modifierId: ModifierCategoryId,
@@ -46,23 +46,11 @@ export function isModifierIncompatibleWithEngine(
   _modifiers?: ConversionModifiers
 ): boolean {
   if (!engineId) return false;
+  const moduleInstance = getModuleById(engineId);
+  if (!moduleInstance?.manifest?.supportedModifiers) return false;
 
-  if (engineId === 'stream-copy') {
-    // Stream copy (Remux) is strictly a bitstream repacker. It cannot transcode.
-    if (modifierId === 'fps') return true;
-    if (modifierId === 'quality') return true;
-    if (modifierId === 'video_codec') return true;
-    if (modifierId === 'audio_codec') return true;
-    if (modifierId === 'audio_merge') return true;
-    if (modifierId === 'video_duration') return true;
-    if (modifierId === 'resolution') return true;
-  }
-
-  return false;
+  return !moduleInstance.manifest.supportedModifiers.includes(modifierId);
 }
-
-// Compatibility export
-export const isCategoryIncompatibleWithEngine = isModifierIncompatibleWithEngine;
 
 /**
  * Validates the active modifiers against the selected engine.
@@ -76,8 +64,6 @@ export function checkEngineCompatibility(
       isIncompatible: false,
       incompatibleModifiers: [],
       incompatibleModifierNames: [],
-      incompatibleCategories: [],
-      incompatibleCategoryNames: [],
       reason: '',
     };
   }
@@ -96,8 +82,6 @@ export function checkEngineCompatibility(
       isIncompatible: false,
       incompatibleModifiers: [],
       incompatibleModifierNames: [],
-      incompatibleCategories: [],
-      incompatibleCategoryNames: [],
       reason: '',
     };
   }
@@ -110,8 +94,6 @@ export function checkEngineCompatibility(
     isIncompatible: true,
     incompatibleModifiers,
     incompatibleModifierNames,
-    incompatibleCategories: incompatibleModifiers,
-    incompatibleCategoryNames: incompatibleModifierNames,
     reason: `O motor selecionado não permite modificar: ${incompatibleModifierNames.join(', ')}. Este motor realiza apenas cópia de fluxo sem re-encodificação.`,
     recommendedEngineId: 'ffmpeg-core-mt',
     recommendedEngineName: 'FFmpeg Multi-Thread',
