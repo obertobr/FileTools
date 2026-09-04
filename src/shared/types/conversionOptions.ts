@@ -1,4 +1,4 @@
-﻿/**
+/**
  * src/shared/types/conversionOptions.ts
  *
  * Strongly-typed options for media conversion.
@@ -11,22 +11,44 @@ export type ConfigCategoryId =
   | 'fps'
   | 'resolution'
   | 'audio_tracks'
+  | 'audio_merge'
   | 'subtitles'
   | 'threads'
   | 'quality'
-  | 'video_codec';
+  | 'video_codec'
+  | 'audio_codec'
+  | 'video_duration';
 
 export type QualityPreset = 'original' | 'balanced' | 'compressed' | 'custom';
 
 export type ResolutionScale = 'original' | '1080p' | '720p' | '480p' | '320p' | 'custom';
 
-export type VideoCodecChoice = 'auto' | 'h264' | 'vp8' | 'vp9' | 'copy';
+export type VideoCodecChoice =
+  | 'auto'
+  | 'h264'
+  | 'hevc'
+  | 'vp8'
+  | 'vp9'
+  | 'mpeg4'
+  | 'theora'
+  | 'copy';
+
+export type AudioCodecChoice =
+  | 'auto'
+  | 'mp3'
+  | 'aac'
+  | 'vorbis'
+  | 'opus'
+  | 'flac'
+  | 'pcm'
+  | 'ac3'
+  | 'copy';
 
 export interface ConversionOptions {
   // Stack of active categories
   activeCategories: ConfigCategoryId[];
 
-  // Audio Tracks (Multi-select, all selected by default from real probed streams)
+  // Audio Tracks (Multi-select for video output, or merge selection for audio output)
   selectedAudioTracks: number[];
 
   // Subtitles (Multi-select, from real probed streams)
@@ -57,6 +79,11 @@ export interface ConversionOptions {
 
   // Codecs
   videoCodec?: VideoCodecChoice;
+  audioCodec?: AudioCodecChoice;
+
+  // Video Duration (for Image -> Video)
+  videoDurationSeconds?: number;
+  isCustomDuration?: boolean;
 
   // Probed media streams (real file metadata - NEVER mocked)
   probedMedia?: MediaProbeResult;
@@ -69,8 +96,10 @@ export const DEFAULT_CONVERSION_OPTIONS: ConversionOptions = {
   keepAllSubtitles: true,
   threadsMode: 'auto',
   qualityPreset: 'original',
-  resolutionScale: '480p',
+  resolutionScale: 'original',
   videoCodec: 'auto',
+  audioCodec: 'auto',
+  videoDurationSeconds: 10,
   gifFps: 12,
   gifScaleWidth: 480,
 };

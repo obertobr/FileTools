@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AlertCircle, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
 import { UploadDropzone } from './UploadDropzone';
 import { FilePreview } from './FilePreview';
@@ -14,7 +14,8 @@ import { FORMATS, describeFile, type Format } from '@/lib/formats';
 import { resolvePossibleConversions, resolveAvailableEngines, type EngineOption } from '@/modules/registry';
 import { WorkerManager } from '@/core/engine/WorkerManager';
 import { type ConversionOptions, DEFAULT_CONVERSION_OPTIONS } from '@/shared/types/conversionOptions';
-import { probeMediaData, type MediaProbeResult } from '@/core/media/mediaProbe';
+import { probeMediaData, probeWithBrowser, type MediaProbeResult } from '@/core/media/mediaProbe';
+import { checkEngineCompatibility } from '@/modules/engineCapabilities';
 
 type Status = 'idle' | 'converting' | 'done' | 'error';
 
@@ -107,37 +108,66 @@ export function ConvertPanel({
     };
   }, [sourceExt, target, file]);
 
-  
   // Asynchronously probe real media tracks (audio, subtitles, video) on file load
   useEffect(() => {
     if (!file) {
       setProbedMedia(undefined);
       return;
     }
+    let isCurrent = true;
     const slice = file.slice(0, Math.min(file.size, 1024 * 1024));
-    slice.arrayBuffer().then((buf) => {
-      const result = probeMediaData(new Uint8Array(buf));
-      setProbedMedia(result);
-      if (result.audioStreams.length > 0) {
-        setConversionOptions((prev) => ({
-          ...prev,
-          probedMedia: result,
-          selectedAudioTracks: result.audioStreams.map((_, idx) => idx),
-          selectedSubtitleTracks: result.subtitleStreams.map((_, idx) => idx),
-        }));
-      } else {
-        setConversionOptions((prev) => ({
-          ...prev,
-          probedMedia: result,
-          selectedSubtitleTracks: result.subtitleStreams.map((_, idx) => idx),
-        }));
+    slice.arrayBuffer().then(async (buf) => {
+      let result = probeMediaData(new Uint8Array(buf));
+
+      if (
+        (result.format === 'unknown' || result.videoStreams.length === 0) &&
+        file.size > 1024 * 1024 &&
+        /\.(mp4|mov|m4v|3gp)$/i.test(file.name)
+      ) {
+        try {
+          const tailSlice = file.slice(Math.max(0, file.size - 512 * 1024));
+          const tailBuf = await tailSlice.arrayBuffer();
+          const tailResult = probeMediaData(new Uint8Array(tailBuf));
+          if (tailResult.format !== 'unknown' && tailResult.videoStreams.length > 0) {
+            result = tailResult;
+          }
+        } catch {
+          // ignore
+        }
       }
+
+      const finalResult = await probeWithBrowser(file, result);
+      if (!isCurrent) return;
+
+      setProbedMedia(finalResult);
+      setConversionOptions((prev) => ({
+        ...prev,
+        probedMedia: finalResult,
+        customFps: finalResult.fps ? finalResult.fps : prev.customFps,
+        selectedAudioTracks: finalResult.audioStreams.map((_, idx) => idx),
+        selectedSubtitleTracks: finalResult.subtitleStreams.map((_, idx) => idx),
+      }));
     }).catch((err) => {
       console.warn('[ConvertPanel] Falha ao analisar contêiner de mídia:', err);
     });
+
+    return () => {
+      isCurrent = false;
+    };
   }, [file]);
 
   const activeEngine = availableEngines.find((e) => e.moduleId === selectedEngineId) ?? availableEngines[0];
+
+  // Engine compatibility check with active options
+  const engineCompatibility = useMemo(() => {
+    return checkEngineCompatibility(activeEngine?.moduleId, conversionOptions);
+  }, [activeEngine?.moduleId, conversionOptions]);
+
+  const incompatibleEngineIds = useMemo(() => {
+    return availableEngines
+      .filter((e) => checkEngineCompatibility(e.moduleId, conversionOptions).isIncompatible)
+      .map((e) => e.moduleId);
+  }, [availableEngines, conversionOptions]);
 
   function reset() {
     setFile(null);
@@ -164,6 +194,15 @@ export function ConvertPanel({
       : activeEngine;
 
     if (!engineToUse) return;
+
+    // Guard against running conversion with incompatible options
+    const comp = checkEngineCompatibility(engineToUse.moduleId, conversionOptions);
+    if (comp.isIncompatible) {
+      setErrorMessage(comp.reason);
+      setFailedEngineName(engineToUse.moduleName);
+      setStatus('error');
+      return;
+    }
 
     setStatus('converting');
     setProgress(0);
@@ -206,7 +245,7 @@ export function ConvertPanel({
         setOutputUrl(URL.createObjectURL(blob));
         setOutputSize(outputData.byteLength);
       } else {
-        throw new Error('Nenhum dado de sa�da retornado pelo motor de convers�o.');
+        throw new Error('Nenhum dado de saída retornado pelo motor de conversão.');
       }
       
       setStatus('done');
@@ -263,6 +302,7 @@ export function ConvertPanel({
             engines={availableEngines}
             selectedEngineId={activeEngine?.moduleId ?? null}
             onSelectEngine={setSelectedEngineId}
+            incompatibleEngineIds={incompatibleEngineIds}
           />
 
           <ConversionOptionsPanel
@@ -272,19 +312,23 @@ export function ConvertPanel({
             onChange={setConversionOptions}
             isMultiThreadEngine={activeEngine?.acceleration === 'cpu-multithread'}
             probedMedia={probedMedia}
+            selectedEngineId={activeEngine?.moduleId ?? null}
+            onSelectEngine={setSelectedEngineId}
           />
         </>
       )}
 
       {status === 'idle' && (
-        <Button
-          variant="primary"
-          size="md"
-          disabled={!target || !activeEngine}
-          onClick={() => start()}
-        >
-          {target ? `Converter para ${target}` : 'Selecione um formato'}
-        </Button>
+        <div className="space-y-2">
+          <Button
+            variant="primary"
+            size="md"
+            disabled={!target || !activeEngine || engineCompatibility.isIncompatible}
+            onClick={() => start()}
+          >
+            {target ? `Converter para ${target.replace(/^\.+/, '')}` : 'Selecione um formato'}
+          </Button>
+        </div>
       )}
 
       {status === 'converting' && (
@@ -311,7 +355,7 @@ export function ConvertPanel({
             <AlertCircle className="size-5 text-destructive shrink-0 mt-0.5" />
             <div className="space-y-1 min-w-0">
               <Typography variant="h3" color="destructive">
-                Falha na convers�o com {failedEngineName || 'o motor selecionado'}
+                Falha na conversão com {failedEngineName || 'o motor selecionado'}
               </Typography>
               <Typography variant="caption" color="muted" className="block whitespace-pre-wrap break-words">
                 {errorMessage}
@@ -323,7 +367,7 @@ export function ConvertPanel({
           {availableEngines.filter(e => e.moduleId !== selectedEngineId).length > 0 && (
             <div className="pt-2 border-t border-destructive/20">
               <Typography variant="caption" className="font-semibold block mb-1.5">
-                Voc� pode tentar com outro motor compat�vel:
+                Você pode tentar com outro motor compatível:
               </Typography>
               <div className="flex flex-wrap gap-2">
                 {availableEngines
@@ -354,7 +398,7 @@ export function ConvertPanel({
                 className="focus-ring flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Terminal className="size-3" />
-                <span>{showErrorLogs ? 'Ocultar Terminal de Diagn�stico' : 'Ver Logs de Diagn�stico'}</span>
+                <span>{showErrorLogs ? 'Ocultar Terminal de Diagnóstico' : 'Ver Logs de Diagnóstico'}</span>
                 {showErrorLogs ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
               </button>
 

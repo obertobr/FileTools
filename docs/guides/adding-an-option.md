@@ -113,35 +113,109 @@ export const DEFAULT_CONVERSION_OPTIONS: ConversionOptions = {
 
 Edite [`src/ui/components/options/CategoryDefinitions.ts`](../../src/ui/components/options/CategoryDefinitions.ts).
 
-Adicione uma entrada no array `CATEGORY_DEFINITIONS`:
+### 2.2. Princípio da Inicialização com Metadados Nativos Reais (Zero Valores Arbitrários)
+
+> [!CRITICAL]
+> **PROIBIÇÃO DE VALORES INICIAIS ARBITRÁRIOS EM CONVERSÕES:**
+> NUNCA inicialize um card com valores arbitrários (por exemplo, 12 fps em um vídeo quando 12 é específico de GIF).
+
+Ao fazer upload de um arquivo, o container probe (`src/core/media/mediaProbe.ts`) extrai imediatamente do cabeçalho binário nativo:
+- **Taxa de quadros real (`fps`)**: Calculado via EBML `DefaultDuration` (`0x23 0xE3 0x83`) no Matroska/WebM ou `mdhd/stts` no MP4.
+- **Dimensões reais (`width`, `height`)**: Extraído de `PixelWidth`/`PixelHeight` ou `tkhd`.
+- **Faixas de áudio e legendas reais**: Títulos, codecs e contagem sem simulação.
+
+**Regras de Inicialização:**
+1. **Taxa de Quadros (`fps`)**:
+   - Em conversões para **Vídeo**: Deve inicializar no preset `Original (X fps)` ou no FPS nativo detectado (ex: 30 fps para arquivos de 30 fps). NUNCA exibir 12 fps em rotas de vídeo.
+   - Em conversões para **GIF**: Inicializar no preset padrão de GIF (12 fps), permitindo ao usuário escolher outros presets ou nativo.
+2. **Resolução e Escala (`resolution`)**:
+   - Inicializar sempre com `Original` (`100% nativo do arquivo`), indicando na interface as dimensões nativas extraídas (ex: `Original (1920x1080)`).
+3. **Qualidade (`quality`)**:
+   - Inicializar em `Original` (CRF 18 / Fidelidade máxima).
+
+---
+
+### 2.3. Contrato de Compatibilidade entre Motores e Opções (Transcoder vs. Stream-Copy)
+
+O FileTools possui motores com arquiteturas distintas:
+1. **Remux Direto / Stream Copy (`stream-copy`)**:
+   - Opera via `-c copy` em velocidade quase instantânea (< 1s) sem perdas de qualidade.
+   - **Incompatibilidade Inerente**: NÃO processa nem re-encodifica frames. Portanto, é **estruturalmente incompatível** com:
+     - `fps` (Taxa de Quadros)
+     - `resolution` (Resolução e Escala)
+     - `quality` (Qualidade e Compressão / CRF)
+     - `video_codec` (Alteração de Codec de Vídeo)
+     - `audio_codec` (Alteração de Codec de Áudio)
+     - `audio_merge` (União de Faixas com filtro `amix`)
+     - `video_duration` (Geração de vídeo a partir de imagem)
+2. **Motores de Transcodificação (`ffmpeg-core-mt`, `ffmpeg-core`)**:
+   - Compatíveis com 100% de todas as opções e filtros de processamento de mídia.
+
+#### Regras de Interface e Bloqueio (UX Protection)
+- **No Seletor de Opções (`AddCategoryPicker`)**:
+  - Opções incompatíveis com o motor selecionado devem exibir a tag: `Requer Transcodificador`.
+- **No Painel de Configurações (`ConversionOptionsPanel`)**:
+  - Se uma opção incompatível estiver ativa enquanto o motor Remux estiver selecionado, um banner de alerta âmbar DEVE ser exibido explicando a incompatibilidade e oferecendo um botão de 1 clique: `[Alternar para FFmpeg Multi-Thread]`.
+- **No Botão de Conversão Principal (`ConvertPanel`)**:
+  - O botão de conversão DEVE ser DESABILITADO quando houver opções incompatíveis ativas (`disabled={isIncompatible}`), exibindo: `Motor incompatível com opções selecionadas`. É expressamente proibido permitir que o usuário realize uma conversão na qual suas opções seriam ignoradas silenciosamente.
+
+---
+
+### 2.1. Matriz Universal de Aplicabilidade e Regras por Tipo de Mídia
+
+> [!CRITICAL]
+> **PROIBIÇÃO DE LISTAS HARDCODED DE FORMATOS:**
+> NUNCA use listas estáticas como `['mp4', 'mkv', 'webm'].includes(target)` na função `isApplicable`.
+> Fazer isso quebra formatos como `mpeg`, `mpg`, `vob`, `flv`, `wmv`, `ts`, etc.
+> As opções devem ser habilitadas com base nas **Capacidades de Mídia** (`categoryOfExtension(sourceExt)` e `categoryOfExtension(target)`).
+
+A assinatura do contrato `isApplicable` e `isPinned` é:
+```typescript
+isApplicable: (target: string, isMT: boolean, sourceExt?: string) => boolean;
+isPinned?: (target: string, sourceExt?: string) => boolean;
+```
+
+#### Tabela Canônica de Aplicabilidade
+
+| Categoria | ID | Regra de Aplicabilidade (`isApplicable`) | Fixada (`isPinned`) | Notas Semânticas |
+|---|---|---|---|---|
+| **Duração do Vídeo** | `video_duration` | `srcCat === 'image' && tgtCat === 'video'` | Sim, para imagem $\to$ vídeo | **PROIBIDO** em imagem $\to$ imagem (ex: PNG $\to$ JPG) ou imagem $\to$ GIF. Apenas para gerar vídeo a partir de imagem. |
+| **Resolução e Escala** | `resolution` | `tgtCat === 'video' \|\| target === 'gif'` | Sim, para GIF | Suportado por **TODOS** os formatos de vídeo (MP4, MKV, WebM, MPEG, AVI, MOV, etc.) e animação GIF. |
+| **Taxa de Quadros (FPS)** | `fps` | `tgtCat === 'video' \|\| target === 'gif'` | Sim, para GIF | Suportado por **TODOS** os formatos de vídeo e animação GIF. |
+| **Qualidade e Compressão** | `quality` | `tgtCat === 'video'` | Não | Controle de CRF/Preset para qualquer vídeo codificado. |
+| **Codec de Vídeo** | `video_codec` | `tgtCat === 'video'` | Não | Seleção de encoder (H.264, HEVC, VP8, VP9, etc.). O painel filtra dinamicamente os codecs suportados pelo contêiner de destino. |
+| **Faixas de Áudio** | `audio_tracks` | `(srcCat === 'video' \|\| srcCat === 'audio') && tgtCat === 'video' && target !== 'gif'` | Não | Seleção de faixas independentes no contêiner de vídeo. **Mutuamente exclusivo** com `audio_merge`. |
+| **Juntar Faixas de Áudio** | `audio_merge` | `srcCat === 'video' && (tgtCat === 'audio' \|\| (tgtCat === 'video' && target !== 'gif'))` | Não | Mixagem das trilhas via filtro `amix`. Disponível para Vídeo $\to$ Áudio E Vídeo $\to$ Vídeo (ex: juntar mic + jogo do OBS). |
+| **Faixas de Legenda** | `subtitles` | `srcCat === 'video' && ['mp4', 'mkv', 'webm', 'mov', 'ts'].includes(target)` | Não | Gerenciamento de legendas embutidas em contêineres compatíveis. |
+| **Codec de Áudio** | `audio_codec` | `srcCat !== 'image' && (tgtCat === 'video' \|\| tgtCat === 'audio')` | Não | Seleção de codec de áudio (MP3, AAC, Opus, Vorbis, FLAC, etc.). Ocultado quando a entrada não possui áudio. |
+| **Threads da CPU** | `threads` | `(_target, isMT) => isMT` | Não | Alocação de núcleos de processamento para motores multi-thread. |
+
+### 2.2. Regras de Exclusão Mútua e Higienização Automática
+
+1. **Exclusão Mútua (`audio_tracks` vs `audio_merge`):**
+   - Um contêiner de vídeo não pode simultaneamente tentar manter faixas separadas independentes E mixá-las em um único canal de áudio.
+   - Adicionar `audio_merge` remove automaticamente `audio_tracks`, e vice-versa. O picker oculta a opção oposta.
+2. **Higienização Automática (*Auto-Pruning*):**
+   - Ao trocar de rota ou enviar um novo arquivo com tipo de mídia diferente, o `ConversionOptionsPanel` filtra e remove imediatamente qualquer categoria ativa que não seja aplicável à nova conversão, garantindo zero persistência de cards fantasmas.
+
+### 2.3. Exemplo de Registro de Categoria
 
 ```typescript
-import { MinhaOpcaoIcon } from 'lucide-react'; // Escolher ícone adequado
+import { MinhaOpcaoIcon } from 'lucide-react';
+import { categoryOfExtension } from '@/lib/formats';
 
 export const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
   // ... categorias existentes ...
   {
-    // DEVE ser idêntico ao ConfigCategoryId
     id: 'minha_opcao',
-
-    // Título em PT-BR exibido no card e no picker de adição
     title: 'Minha Opção',
-
-    // Descrição em PT-BR exibida no picker de adição
-    description: 'Breve descrição do que esta opção controla.',
-
-    // Ícone do lucide-react para o card
+    description: 'Breve descrição em português do Brasil.',
     icon: MinhaOpcaoIcon,
-
-    // Função que determina se esta opção é relevante para o formato alvo.
-    // Recebe: target (extensão sem ponto, lowercase) e isMT (se o motor é multi-thread).
-    // Retorna: true se a opção deve estar disponível no picker.
-    isApplicable: (target, isMT) => ['mp4', 'mkv', 'webm'].includes(target),
-
-    // OPCIONAL: Se definida e retornar true, o card aparece automaticamente
-    // na pilha (sem botão de remover) para o formato alvo.
-    // Usar para opções ESSENCIAIS de um formato (ex: FPS e Resolução para GIF).
-    isPinned: (target) => target === 'gif',
+    isApplicable: (target, isMT, sourceExt) => {
+      const srcCat = categoryOfExtension(sourceExt || '');
+      const tgtCat = categoryOfExtension(target);
+      return tgtCat === 'video';
+    },
   },
 ];
 ```

@@ -1,29 +1,35 @@
-﻿import React from 'react';
+import React from 'react';
 import { Typography } from '@/ui/components/core';
 import { cn } from '@/lib/utils';
 import type { ConversionOptions, ResolutionScale } from '@/shared/types/conversionOptions';
+import type { MediaProbeResult } from '@/core/media/mediaProbe';
 
 export interface ResolutionCardProps {
   options: ConversionOptions;
   onChange: (updated: Partial<ConversionOptions>) => void;
   isGif?: boolean;
+  probedMedia?: MediaProbeResult;
 }
 
-export function ResolutionCard({ options, onChange, isGif }: ResolutionCardProps) {
+export function ResolutionCard({ options, onChange, isGif, probedMedia }: ResolutionCardProps) {
   const currentScale = options.customScaleWidth !== undefined
     ? options.customScaleWidth
     : options.resolutionScale;
   const isCustomScale = Boolean(options.isCustomResolution);
+
+  const nativeWidth = probedMedia?.width || options.probedMedia?.width;
+  const nativeHeight = probedMedia?.height || options.probedMedia?.height;
+  const nativeDimensionStr = nativeWidth && nativeHeight ? `${nativeWidth}x${nativeHeight}` : '';
 
   const presets: { id: ResolutionScale; label: string; desc: string; width: number }[] = isGif
     ? [
         { id: '320p', label: '320p', desc: 'Leve (320px)', width: 320 },
         { id: '480p', label: '480p', desc: 'Padrão (480px)', width: 480 },
         { id: '720p', label: '720p', desc: 'HD (720px)', width: 720 },
-        { id: 'original', label: 'Original', desc: '100% nativo', width: 0 },
+        { id: 'original', label: 'Original', desc: nativeDimensionStr ? `Nativo (${nativeDimensionStr})` : '100% nativo', width: 0 },
       ]
     : [
-        { id: 'original', label: 'Original', desc: '100% nativo', width: 0 },
+        { id: 'original', label: nativeDimensionStr ? `Original (${nativeDimensionStr})` : 'Original', desc: '100% nativo do arquivo', width: 0 },
         { id: '1080p', label: '1080p', desc: 'Full HD (1920px)', width: 1920 },
         { id: '720p', label: '720p', desc: 'HD (1280px)', width: 1280 },
         { id: '480p', label: '480p', desc: 'SD (854px)', width: 854 },
@@ -40,14 +46,14 @@ export function ResolutionCard({ options, onChange, isGif }: ResolutionCardProps
           {isCustomScale
             ? `${options.customScaleWidth}px`
             : options.resolutionScale === 'original'
-            ? 'Original (100%)'
+            ? (nativeDimensionStr ? `Original (${nativeDimensionStr})` : 'Original (100%)')
             : String(options.resolutionScale)}
         </span>
       </div>
 
       <div className={cn('grid gap-1.5', isGif ? 'grid-cols-5' : 'grid-cols-6')}>
         {presets.map((preset) => {
-          const isSelected = !isCustomScale && options.resolutionScale === preset.id;
+          const isSelected = !isCustomScale && (options.resolutionScale || 'original') === preset.id;
           return (
             <button
               key={preset.id}
@@ -79,8 +85,8 @@ export function ResolutionCard({ options, onChange, isGif }: ResolutionCardProps
             onChange({
               resolutionScale: 'custom',
               isCustomResolution: true,
-              customScaleWidth: options.customScaleWidth || (isGif ? 480 : 1280),
-              gifScaleWidth: options.customScaleWidth || (isGif ? 480 : 1280),
+              customScaleWidth: options.customScaleWidth || (isGif ? 480 : (nativeWidth || 1280)),
+              gifScaleWidth: options.customScaleWidth || (isGif ? 480 : (nativeWidth || 1280)),
             })
           }
           className={cn(
@@ -102,7 +108,7 @@ export function ResolutionCard({ options, onChange, isGif }: ResolutionCardProps
             type="number"
             min="100"
             max="3840"
-            value={options.customScaleWidth || (isGif ? 480 : 1280)}
+            value={options.customScaleWidth || (isGif ? 480 : (nativeWidth || 1280))}
             onChange={(e) => {
               const val = Math.max(100, Math.min(3840, parseInt(e.target.value, 10) || 100));
               onChange({

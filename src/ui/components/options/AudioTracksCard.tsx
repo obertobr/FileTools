@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { CheckSquare, Square, Info, Loader2 } from 'lucide-react';
 import { Badge, Typography } from '@/ui/components/core';
 import { cn } from '@/lib/utils';
@@ -10,7 +10,11 @@ export interface AudioTracksCardProps {
   probedMedia?: MediaProbeResult;
 }
 
-export function AudioTracksCard({ selectedTracks, onChange, probedMedia }: AudioTracksCardProps) {
+export function AudioTracksCard({
+  selectedTracks,
+  onChange,
+  probedMedia,
+}: AudioTracksCardProps) {
   // If still probing, display a non-blocking loading state
   if (!probedMedia) {
     return (
@@ -40,7 +44,7 @@ export function AudioTracksCard({ selectedTracks, onChange, probedMedia }: Audio
     );
   }
 
-  function toggleTrack(index: number) {
+  function handleToggleTrack(index: number) {
     const exists = selectedTracks.includes(index);
     const next = exists ? selectedTracks.filter((i) => i !== index) : [...selectedTracks, index].sort((a, b) => a - b);
     onChange(next);
@@ -68,7 +72,7 @@ export function AudioTracksCard({ selectedTracks, onChange, probedMedia }: Audio
           >
             Selecionar Todas
           </button>
-          <span className="text-border text-xs">•</span>
+          <span className="text-border text-xs">|</span>
           <button
             type="button"
             onClick={deselectAll}
@@ -88,11 +92,11 @@ export function AudioTracksCard({ selectedTracks, onChange, probedMedia }: Audio
               key={idx}
               role="button"
               tabIndex={0}
-              onClick={() => toggleTrack(idx)}
+              onClick={() => handleToggleTrack(idx)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
-                  toggleTrack(idx);
+                  handleToggleTrack(idx);
                 }
               }}
               className={cn(
@@ -131,7 +135,7 @@ export function AudioTracksCard({ selectedTracks, onChange, probedMedia }: Audio
       {selectedTracks.length === 0 && (
         <div className="p-2 rounded border border-destructive/30 bg-destructive-subtle/20 text-[11px] text-destructive flex items-center gap-1.5">
           <Info className="size-3.5 shrink-0" />
-          <span>Atenção: Nenhuma faixa selecionada. O arquivo final ficará mudo (sem áudio).</span>
+          <span>Atenção: Nenhuma faixa selecionada. O vídeo final ficará mudo (sem áudio).</span>
         </div>
       )}
     </div>

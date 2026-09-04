@@ -157,3 +157,40 @@ Para manter a **padronização** e **escalabilidade** do sistema, consulte os gu
 | [`guides/testing-strategy.md`](./guides/testing-strategy.md) | Ao escrever testes ou verificar pipeline de validação |
 
 Estes documentos são a **fonte de verdade** para implementação. Desvios dos padrões documentados são proibidos sem aprovação explícita.
+
+---
+
+## 11. Princípio da Matriz Universal de Opções de Conversão
+
+O sistema de opções avançadas (Config Stack) obedece estritamente à regra de **Capacidades Semânticas de Mídia**:
+
+1. **Classificação por Categorias de Mídia:**
+   - Em vez de listas manuais e frágeis de extensões (ex: `['mp4', 'mkv']`), as opções são resolvidas cruzando `categoryOfExtension(sourceExt)` com `categoryOfExtension(target)`.
+   - Formatos de vídeo (`video`) sempre oferecem **Resolução**, **FPS**, **Qualidade** e **Codec de Vídeo** (incluindo contêineres legados e de broadcast como `mpeg`, `mpg`, `vob`, `ts`, `wmv`, `flv`, etc.).
+   - Conversões de vídeo para áudio ou vídeo para vídeo oferecem **Juntar Faixas de Áudio** (`audio_merge`) para mixagem em fluxo único via filtro `amix`.
+   - Conversões de imagem para vídeo oferecem **Duração do Vídeo** (`video_duration`), sendo proibida a exibição desta opção em conversões de foto para foto (imagem para imagem).
+2. **Higienização e Exclusividade Mútua:**
+   - O orquestrador `ConversionOptionsPanel` higieniza e poda automaticamente qualquer categoria que não pertença à conversão ativa (*auto-pruning*).
+   - `audio_merge` (mixagem de faixas) e `audio_tracks` (manter trilhas separadas no contêiner) operam em regime de exclusão mútua na interface.
+
+## 12. Compatibilidade de Motores e Inicialização com Metadados Nativos
+
+### 12.1. Matriz de Compatibilidade Motor x Capacidade
+
+| Opção / Configuração | Remux Direto (`stream-copy`) | FFmpeg Multi-Thread (`ffmpeg-core-mt`) | FFmpeg Single-Thread (`ffmpeg-core`) |
+|---|:---:|:---:|:---:|
+| **Cópia Instantânea (`-c copy`)** | Sim | Sim | Sim |
+| **Taxa de Quadros (`-r fps`)** | ❌ Incompatível | ✅ Total | ✅ Total |
+| **Escala / Resolução (`-vf scale`)** | ❌ Incompatível | ✅ Total | ✅ Total |
+| **Qualidade / CRF / Bitrate** | ❌ Incompatível | ✅ Total | ✅ Total |
+| **Transcodificação de Codec** | ❌ Incompatível | ✅ Total | ✅ Total |
+| **Unir Faixas (`amix` filter)** | ❌ Incompatível | ✅ Total | ✅ Total |
+| **Seleção de Faixas de Áudio** | ✅ Suportado | ✅ Total | ✅ Total |
+| **Subtítulos Embutidos** | ✅ Suportado | ✅ Total | ✅ Total |
+| **Duração Imagem -> Vídeo** | ❌ Incompatível | ✅ Total | ✅ Total |
+
+### 12.2. Contrato de Proteção ao Usuário (UX Guard)
+1. **Detecção de Conflito**: O módulo `src/modules/engineCapabilities.ts` avalia em tempo real (`checkEngineCompatibility`) as opções ativas contra as capacidades do motor selecionado.
+2. **Prevenção de Execução Silenciosa Falha**: Caso o motor atual não suporte aplicar as alterações solicitadas, a conversão é bloqueada na UI com indicação clara do motivo e botão de alternância imediata para o motor transcodificador compatível.
+3. **Extração e Fidelidade de Metadados**: O probe binário nativo (`src/core/media/mediaProbe.ts`) garante que framerate e dimensões sejam populados a partir do arquivo real do usuário, eliminando defaults arbitrários.
+

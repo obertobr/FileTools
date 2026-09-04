@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { resolvePossibleConversions, resolveAvailableEngines } from './registry';
 
 describe('Module Registry', () => {
@@ -19,10 +19,13 @@ describe('Module Registry', () => {
   it('resolves wildcards correctly using MIME type', () => {
     const results = resolvePossibleConversions('MP4', 'video/mp4');
     expect(results.length).toBeGreaterThan(0);
-    const ffmpeg = results.find(r => r.moduleId === 'ffmpeg-core');
-    expect(ffmpeg).toBeDefined();
-    expect(ffmpeg?.toExtensions).toContain('.mp4');
-    expect(ffmpeg?.toExtensions).toContain('.gif');
+    const allStExts = results.filter(r => r.moduleId === 'ffmpeg-core').flatMap(r => r.toExtensions);
+    expect(allStExts).toContain('.mp4');
+    expect(allStExts).toContain('.gif');
+    expect(allStExts).toContain('.mov');
+    expect(allStExts).toContain('.avi');
+    expect(allStExts).toContain('.flv');
+    expect(allStExts).toContain('.wmv');
   });
 
   it('resolves MKV even if browser provides empty MIME type', () => {
@@ -31,14 +34,30 @@ describe('Module Registry', () => {
     const allMtExts = results.filter(r => r.moduleId === 'ffmpeg-core-mt').flatMap(r => r.toExtensions);
     expect(allMtExts).toContain('.mp4');
     expect(allMtExts).toContain('.gif');
+    expect(allMtExts).toContain('.webm');
+    expect(allMtExts).toContain('.mp3');
   });
 
-  it('resolves audio MIME types', () => {
+  it('resolves audio MIME types and cross conversions', () => {
     const results = resolvePossibleConversions('MP3', 'audio/mpeg');
     expect(results.length).toBeGreaterThan(0);
-    const ffmpeg = results.find(r => r.moduleId === 'ffmpeg-core');
-    expect(ffmpeg).toBeDefined();
-    expect(ffmpeg?.toExtensions).toContain('.wav');
+    const allAudioExts = results.filter(r => r.moduleId === 'ffmpeg-core').flatMap(r => r.toExtensions);
+    expect(allAudioExts).toContain('.wav');
+    expect(allAudioExts).toContain('.ogg');
+    expect(allAudioExts).toContain('.flac');
+    expect(allAudioExts).toContain('.aac');
+    expect(allAudioExts).toContain('.opus');
+  });
+
+  it('resolves video to audio extraction targets', () => {
+    const results = resolvePossibleConversions('MP4', 'video/mp4');
+    const mtRules = results.filter(r => r.moduleId === 'ffmpeg-core-mt');
+    const allTargets = mtRules.flatMap(r => r.toExtensions);
+    expect(allTargets).toContain('.mp3');
+    expect(allTargets).toContain('.wav');
+    expect(allTargets).toContain('.flac');
+    expect(allTargets).toContain('.aac');
+    expect(allTargets).toContain('.opus');
   });
 
   it('returns empty array for unsupported formats', () => {
@@ -81,6 +100,58 @@ describe('Module Registry', () => {
       // FFmpeg MT is also available as full re-encoding alternative
       const mtEngine = mp4Engines.find(e => e.moduleId === 'ffmpeg-core-mt');
       expect(mtEngine).toBeDefined();
+    });
+
+    it('resolves engines for video-to-audio extraction (MKV -> MP3, MP4 -> AAC)', async () => {
+      const mkvToMp3 = await resolveAvailableEngines('MKV', 'MP3');
+      expect(mkvToMp3.length).toBeGreaterThanOrEqual(2);
+      expect(mkvToMp3[0].moduleId).toBe('ffmpeg-core-mt');
+      expect(mkvToMp3[0].acceleration).toBe('cpu-multithread');
+
+      const mp4ToAac = await resolveAvailableEngines('MP4', 'AAC');
+      expect(mp4ToAac.length).toBeGreaterThanOrEqual(2);
+      expect(mp4ToAac[0].moduleId).toBe('ffmpeg-core-mt');
+    });
+
+    it('resolves engines for new audio conversions (WAV -> OPUS, FLAC -> M4A)', async () => {
+      const wavToOpus = await resolveAvailableEngines('WAV', 'OPUS');
+      expect(wavToOpus.length).toBeGreaterThanOrEqual(2);
+      expect(wavToOpus[0].moduleId).toBe('ffmpeg-core-mt');
+
+      const flacToM4a = await resolveAvailableEngines('FLAC', 'M4A');
+      expect(flacToM4a.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('resolves engines for expanded video containers (WMV -> MP4, FLV -> WEBM, 3GP -> MP4)', async () => {
+      const wmvToMp4 = await resolveAvailableEngines('WMV', 'MP4');
+      expect(wmvToMp4.length).toBeGreaterThanOrEqual(2);
+      expect(wmvToMp4[0].moduleId).toBe('ffmpeg-core-mt');
+
+      const flvToWebm = await resolveAvailableEngines('FLV', 'WEBM');
+      expect(flvToWebm.length).toBeGreaterThanOrEqual(2);
+
+      const threeGpToMp4 = await resolveAvailableEngines('3GP', 'MP4');
+      expect(threeGpToMp4.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('resolves engines for Audio to Video with black screen (MP3 -> MP4, WAV -> WEBM)', async () => {
+      const mp3ToMp4 = await resolveAvailableEngines('MP3', 'MP4', 'audio/mpeg');
+      expect(mp3ToMp4.length).toBeGreaterThanOrEqual(2);
+      expect(mp3ToMp4[0].moduleId).toBe('ffmpeg-core-mt');
+
+      const wavToWebm = await resolveAvailableEngines('WAV', 'WEBM', 'audio/wav');
+      expect(wavToWebm.length).toBeGreaterThanOrEqual(2);
+      expect(wavToWebm[0].moduleId).toBe('ffmpeg-core-mt');
+    });
+
+    it('resolves engines for Image to Video (PNG -> MP4, JPG -> WEBM)', async () => {
+      const pngToMp4 = await resolveAvailableEngines('PNG', 'MP4', 'image/png');
+      expect(pngToMp4.length).toBeGreaterThanOrEqual(2);
+      expect(pngToMp4[0].moduleId).toBe('ffmpeg-core-mt');
+
+      const jpgToWebm = await resolveAvailableEngines('JPG', 'WEBM', 'image/jpeg');
+      expect(jpgToWebm.length).toBeGreaterThanOrEqual(2);
+      expect(jpgToWebm[0].moduleId).toBe('ffmpeg-core-mt');
     });
 
     it('does NOT include WebCodecs for formats it cannot demux (e.g. MKV)', async () => {

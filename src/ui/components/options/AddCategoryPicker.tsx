@@ -1,8 +1,9 @@
-﻿import React from 'react';
-import { Search, Plus } from 'lucide-react';
+import React from 'react';
+import { Search, Plus, AlertTriangle } from 'lucide-react';
 import { Card, Typography } from '@/ui/components/core';
 import type { ConfigCategoryId } from '@/shared/types/conversionOptions';
 import type { CategoryDefinition } from './CategoryDefinitions';
+import { isCategoryIncompatibleWithEngine } from '@/modules/engineCapabilities';
 
 export interface AddCategoryPickerProps {
   availableToAdd: CategoryDefinition[];
@@ -10,6 +11,7 @@ export interface AddCategoryPickerProps {
   onSearchChange: (q: string) => void;
   onSelectCategory: (id: ConfigCategoryId) => void;
   onClose: () => void;
+  currentEngineId?: string | null;
 }
 
 export function AddCategoryPicker({
@@ -18,6 +20,7 @@ export function AddCategoryPicker({
   onSearchChange,
   onSelectCategory,
   onClose,
+  currentEngineId,
 }: AddCategoryPickerProps) {
   return (
     <Card variant="raised" className="p-3 space-y-2 border-primary/30 bg-surface shadow-md animate-in fade-in-50 duration-150">
@@ -41,7 +44,7 @@ export function AddCategoryPicker({
           type="text"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Buscar configuração (ex: áudio, legendas, threads, qualidade)..."
+          placeholder="Buscar configuração (ex: áudio, legendas, threads, qualidade, fps)..."
           className="w-full rounded-md border border-border bg-surface-raised pl-8 pr-3 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
           autoFocus
         />
@@ -56,6 +59,8 @@ export function AddCategoryPicker({
         ) : (
           availableToAdd.map((cat) => {
             const Icon = cat.icon;
+            const isIncompatible = isCategoryIncompatibleWithEngine(cat.id, currentEngineId);
+
             return (
               <div
                 key={cat.id}
@@ -75,7 +80,15 @@ export function AddCategoryPicker({
                     <Icon className="size-3.5" strokeWidth={2} />
                   </span>
                   <div className="min-w-0">
-                    <div className="text-[12px] font-medium text-foreground">{cat.title}</div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[12px] font-medium text-foreground">{cat.title}</span>
+                      {isIncompatible && (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-medium bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded">
+                          <AlertTriangle className="size-2.5 text-red-400" />
+                          não compatível com o motor selecionado
+                        </span>
+                      )}
+                    </div>
                     <div className="text-[11px] text-muted-foreground truncate">{cat.description}</div>
                   </div>
                 </div>

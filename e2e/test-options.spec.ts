@@ -23,7 +23,7 @@ test.describe('Pilha Modular Aberta, Detecção Real e Valores Customizáveis', 
 
     // 2. Adiciona Faixas de Legenda à pilha
     await page.getByRole('button', { name: 'Adicionar Configuração' }).click();
-    await page.locator('div[role="button"]:has-text("Faixas de Legenda")').click();
+    await page.locator('div[role="button"]').filter({ hasText: 'Legenda' }).click();
 
     // Verifica que detectou que o arquivo NÃO tem legendas e NÃO exibe legendas falsas
     await expect(page.getByText('Nenhuma faixa de legenda encontrada')).toBeVisible();
@@ -31,7 +31,7 @@ test.describe('Pilha Modular Aberta, Detecção Real e Valores Customizáveis', 
 
     // 3. Adiciona Faixas de Áudio à pilha
     await page.getByRole('button', { name: 'Adicionar Configuração' }).click();
-    await page.locator('div[role="button"]:has-text("Faixas de Áudio")').click();
+    await page.locator('div[role="button"]').filter({ hasText: 'Faixas de' }).filter({ hasNotText: 'Juntar' }).filter({ hasNotText: 'Legenda' }).click();
 
     // sample.mkv tem APENAS 1 faixa de áudio real. NÃO pode existir dados mockados (Faixa 2, Faixa 3, Faixa 4)!
     await expect(page.locator('text=Faixa 1')).toBeVisible();
