@@ -1,4 +1,4 @@
-﻿# Projeto: FileTools
+# Projeto: FileTools
 **Visão Geral:** Um conversor de arquivos universal 100% client-side, rodando localmente no navegador (offline-first). O MVP foca em conversões diretas de mídia e documentos, com a arquitetura base (Módulos, Workers, OPFS) estritamente desenhada para suportar um sistema futuro de "Nodes/Grafo".
 
 ---
@@ -84,30 +84,76 @@ A suíte de testes foca em regras de negócio críticas:
 
 ```text
 /
-├── docs/                       # Documentação arquitetural
-│   ├── ARCHITECTURE.MD         # Visão geral e regras do sistema
-│   └── protocols/              # Especificações isoladas de protocolos
-│       ├── module-contract.md  # Contrato da interface IModule
-│       ├── node-communication.md # Troca de dados entre nós via OPFS
-│       └── export-format.md    # Esquema do arquivo de grafo .ftgraph
-├── public/                     # Binários Wasm, ícones PWA
+├── docs/                            # Documentação arquitetural
+│   ├── ARCHITECTURE.MD              # Visão geral e regras do sistema
+│   ├── guides/                      # Guias práticos de desenvolvimento
+│   │   ├── adding-a-module.md       # Como criar e registrar um novo módulo IModule
+│   │   ├── adding-an-option.md      # Como adicionar opção ao Config Stack
+│   │   ├── adding-a-format.md       # Como registrar formato no catálogo e SSG
+│   │   └── testing-strategy.md      # Estratégia e padrões obrigatórios de testes
+│   └── protocols/                   # Especificações isoladas de protocolos
+│       ├── module-contract.md       # Contrato da interface IModule
+│       ├── node-communication.md    # Troca de dados entre nós via OPFS
+│       └── export-format.md         # Esquema do arquivo de grafo .ftgraph
+├── public/                          # Binários Wasm, ícones PWA
 ├── src/
-│   ├── core/                   # Orquestração desacoplada de UI
-│   │   ├── engine/             # WorkerManager (Singleton orquestrador)
-│   │   ├── fs/                 # OPFSManager (Zelador de sessões)
-│   │   └── workers/            # Web Workers com Comlink
-│   ├── modules/                # Motores de conversão (IModule)
-│   │   ├── registry.ts         # Registro central de módulos
-│   │   ├── ffmpeg.ts           # Motor FFmpeg WASM
-│   │   └── ...                 # Demais motores
-│   ├── shared/                 # Tipagens e utilitários agnósticos
-│   │   └── types/module.ts     # Contratos TypeScript de IModule
-│   ├── styles/                 # Design System & Tailwind Tokens
-│   │   └── global.css          # Tokens inline e base styles
+│   ├── core/                        # Orquestração desacoplada de UI
+│   │   ├── engine/                  # WorkerManager (Singleton orquestrador)
+│   │   ├── fs/                      # OPFSManager (Zelador de sessões)
+│   │   ├── hardware/                # Detecção de hardware e otimização de threads
+│   │   │   └── threadOptimizer.ts   # Thread profiles dinâmicos por codec/CPU
+│   │   ├── media/                   # Probing de containers de mídia
+│   │   │   └── mediaProbe.ts        # Parser zero-dep para MKV/MP4 (EBML/ISO-BMFF)
+│   │   └── workers/                 # Web Workers com Comlink
+│   ├── modules/                     # Motores de conversão (IModule)
+│   │   ├── registry.ts              # Registro central de módulos
+│   │   ├── registry.test.ts         # Testes de resolução do registry
+│   │   ├── ffmpeg-mt.ts             # Motor FFmpeg Multi-Thread (pthreads)
+│   │   ├── ffmpeg.ts                # Motor FFmpeg Single-Thread
+│   │   ├── remux.ts                 # Motor Stream Copy (Remux instantâneo)
+│   │   ├── webcodecs.ts             # Motor WebCodecs (GPU)
+│   │   ├── magick.ts                # Motor ImageMagick WASM
+│   │   ├── pdf.ts                   # Motor pdf-lib
+│   │   ├── mammoth.ts               # Motor mammoth.js (DOCX)
+│   │   └── sheetjs.ts               # Motor SheetJS (planilhas)
+│   ├── shared/                      # Tipagens e utilitários agnósticos
+│   │   ├── types/
+│   │   │   ├── module.ts            # Contratos TypeScript de IModule
+│   │   │   └── conversionOptions.ts # Tipos do Config Stack (opções avançadas)
+│   │   └── utils/                   # Utilitários compartilhados
+│   ├── styles/                      # Design System & Tailwind Tokens
+│   │   └── global.css               # Tokens inline e base styles
 │   ├── ui/
-│   │   ├── components/         # Componentes de interface
-│   │   │   ├── core/           # Design System Base (Button, Card, Typography, etc.)
-│   │   │   └── ...             # Componentes de negócio (ConvertPanel, Dropzone, etc.)
-│   │   └── layouts/            # Layouts Astro e App Shell
-│   └── pages/                  # Roteamento Astro SSG
+│   │   ├── components/              # Componentes de interface
+│   │   │   ├── core/                # Design System Base (Button, Card, Typography, etc.)
+│   │   │   ├── options/             # Cards modulares do Config Stack
+│   │   │   │   ├── CategoryDefinitions.ts  # Catálogo de categorias disponíveis
+│   │   │   │   ├── AddCategoryPicker.tsx   # Modal de busca/adição de categorias
+│   │   │   │   ├── AudioTracksCard.tsx     # Card: seleção de faixas de áudio
+│   │   │   │   ├── SubtitlesCard.tsx       # Card: seleção de legendas
+│   │   │   │   ├── FpsCard.tsx             # Card: taxa de quadros
+│   │   │   │   └── ResolutionCard.tsx      # Card: resolução/escala
+│   │   │   └── ...                  # Componentes de negócio (ConvertPanel, etc.)
+│   │   └── layouts/                 # Layouts Astro e App Shell
+│   └── pages/                       # Roteamento Astro SSG
+├── e2e/                             # Testes End-to-End (Playwright)
+│   ├── modules/                     # Testes de conversão por módulo
+│   └── test-options.spec.ts         # Testes do Config Stack UI
+└── tests/                           # Fixtures e helpers de teste
+    └── fixtures/                    # Arquivos reais para testes
 ```
+
+---
+
+## 10. Guias de Desenvolvimento
+
+Para manter a **padronização** e **escalabilidade** do sistema, consulte os guias normativos antes de qualquer implementação:
+
+| Guia | Quando Consultar |
+|---|---|
+| [`guides/adding-a-module.md`](./guides/adding-a-module.md) | Ao criar um novo motor de conversão (implementar `IModule`) |
+| [`guides/adding-an-option.md`](./guides/adding-an-option.md) | Ao adicionar uma opção ao Config Stack (nova categoria) |
+| [`guides/adding-a-format.md`](./guides/adding-a-format.md) | Ao registrar um formato novo no catálogo ou SSG |
+| [`guides/testing-strategy.md`](./guides/testing-strategy.md) | Ao escrever testes ou verificar pipeline de validação |
+
+Estes documentos são a **fonte de verdade** para implementação. Desvios dos padrões documentados são proibidos sem aprovação explícita.
