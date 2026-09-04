@@ -171,45 +171,35 @@ function getConversionArgs(
     balanced: '23',
     compressed: '28',
   };
-  const crfVal = options?.customCrf !== undefined
-    ? String(options.customCrf)
-    : (crfMap[options?.qualityPreset || 'original'] || '18');
+  const crfVal = options?.targetCrf !== undefined
+    ? String(options.targetCrf)
+    : (options?.customCrf !== undefined
+      ? String(options.customCrf)
+      : (crfMap[options?.qualityPreset || 'original'] || '18'));
 
-  // Optimal libx264 args for 32-bit WASM: uses slice-threading to avoid lookahead pthread deadlocks
+  // Optimal libx264 args for 32-bit WASM: uses slice-threading with the optimal/configured thread allocation
   // and guarantees universal yuv420p pixel format compatibility avoiding WASM SIMD signature errors.
   const getLibx264Args = () => [
-    '-threads', '1',
+    '-threads', String(profile.encoderThreads),
     '-preset', 'ultrafast',
     '-crf', crfVal,
     '-pix_fmt', 'yuv420p',
   ];
 
-  // Video resolution scale filter
+  // Video resolution scale filter: decoupled from preset labels by receiving canonical targetWidth and targetHeight
   let videoScaleFilter: string[] = [];
   if (options?.activeCategories?.includes('resolution')) {
-    if (options.isCustomResolution && options.customScaleWidth) {
-      videoScaleFilter = ['-vf', `scale=${options.customScaleWidth}:-2`];
-    } else if (options.resolutionScale === '1080p') {
-      videoScaleFilter = ['-vf', 'scale=1920:-2'];
-    } else if (options.resolutionScale === '720p') {
-      videoScaleFilter = ['-vf', 'scale=1280:-2'];
-    } else if (options.resolutionScale === '480p') {
-      videoScaleFilter = ['-vf', 'scale=854:-2'];
-    } else if (options.resolutionScale === '320p') {
-      videoScaleFilter = ['-vf', 'scale=480:-2'];
-    } else if (options.resolutionScale === 'cif') {
-      videoScaleFilter = ['-s', '352x288'];
-    } else if (options.resolutionScale === 'qcif') {
-      videoScaleFilter = ['-s', '176x144'];
-    } else if (options.resolutionScale === 'sub-qcif') {
-      videoScaleFilter = ['-s', '128x96'];
+    const width = options.targetWidth || options.customScaleWidth || options.gifScaleWidth;
+    const height = options.targetHeight ?? -2;
+    if (width && width > 0) {
+      videoScaleFilter = ['-vf', `scale=${width}:${height}`];
     }
   }
 
-  // Video framerate (FPS) override
+  // Video framerate (FPS) override: decoupled by receiving canonical targetFps
   let videoFpsArgs: string[] = [];
   if (options?.activeCategories?.includes('fps')) {
-    const targetFps = options.customFps || options.gifFps;
+    const targetFps = options.targetFps || options.customFps || options.gifFps;
     if (targetFps && targetFps > 0) {
       videoFpsArgs = ['-r', String(targetFps)];
     }
@@ -674,9 +664,9 @@ export const FFmpegMTModule: IModule = {
     const outputFileName = originalName.replace(/\.[^.]+$/, '') + outputExt;
 
     // Detect hardware & calculate optimal threads
-    const userMaxThreads = options?.customThreads || (options?.threadsMode === 'custom'
-      ? options.userMaxThreads
-      : (inputs.userMaxThreads ? Number(inputs.userMaxThreads) : undefined));
+    const userMaxThreads = (options?.threadsMode === 'custom' ? (options.customThreads ?? options.userMaxThreads) : undefined)
+      || (inputs.userMaxThreads ? Number(inputs.userMaxThreads) : undefined)
+      || (options?.customThreads ? Number(options.customThreads) : undefined);
 
     const profile = getOptimalThreadProfile(outputExt, { userMaxThreads });
     context.onLog(`[FFmpeg MT] Hardware: ${profile.logicalCores} núcleos lógicos, ~${profile.deviceMemoryGb}GB RAM`);

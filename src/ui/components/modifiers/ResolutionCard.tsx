@@ -34,25 +34,25 @@ export function ResolutionCard({
   const nativeHeight = probedMedia?.height || options.probedMedia?.height;
   const nativeDimensionStr = nativeWidth && nativeHeight ? `${nativeWidth}x${nativeHeight}` : '';
 
-  const presets: { id: ResolutionScale; label: string; desc: string; width: number }[] = is3GPH263
+  const presets: { id: ResolutionScale; label: string; desc: string; width: number; height?: number }[] = is3GPH263
     ? [
-        { id: 'cif', label: 'CIF', desc: 'Padrão (352x288)', width: 352 },
-        { id: 'qcif', label: 'QCIF', desc: 'Clássico (176x144)', width: 176 },
-        { id: 'sub-qcif', label: 'sub-QCIF', desc: 'Ultra-leve (128x96)', width: 128 },
+        { id: 'cif', label: 'CIF', desc: 'Padrão (352x288)', width: 352, height: 288 },
+        { id: 'qcif', label: 'QCIF', desc: 'Clássico (176x144)', width: 176, height: 144 },
+        { id: 'sub-qcif', label: 'sub-QCIF', desc: 'Ultra-leve (128x96)', width: 128, height: 96 },
       ]
     : isGif
     ? [
-        { id: '320p', label: '320p', desc: 'Leve (320px)', width: 320 },
-        { id: '480p', label: '480p', desc: 'Padrão (480px)', width: 480 },
-        { id: '720p', label: '720p', desc: 'HD (720px)', width: 720 },
+        { id: '320p', label: '320p', desc: 'Leve (320px)', width: 320, height: -1 },
+        { id: '480p', label: '480p', desc: 'Padrão (480px)', width: 480, height: -1 },
+        { id: '720p', label: '720p', desc: 'HD (720px)', width: 720, height: -1 },
         { id: 'original', label: 'Original', desc: nativeDimensionStr ? `Nativo (${nativeDimensionStr})` : '100% nativo', width: 0 },
       ]
     : [
         { id: 'original', label: nativeDimensionStr ? `Original (${nativeDimensionStr})` : 'Original', desc: '100% nativo do arquivo', width: 0 },
-        { id: '1080p', label: '1080p', desc: 'Full HD (1920px)', width: 1920 },
-        { id: '720p', label: '720p', desc: 'HD (1280px)', width: 1280 },
-        { id: '480p', label: '480p', desc: 'SD (854px)', width: 854 },
-        { id: '320p', label: '320p', desc: 'Baixa (320px)', width: 320 },
+        { id: '1080p', label: '1080p', desc: 'Full HD (1920px)', width: 1920, height: -2 },
+        { id: '720p', label: '720p', desc: 'HD (1280px)', width: 1280, height: -2 },
+        { id: '480p', label: '480p', desc: 'SD (854px)', width: 854, height: -2 },
+        { id: '320p', label: '320p', desc: 'Baixa (320px)', width: 480, height: -2 },
       ];
 
   return (
@@ -80,9 +80,11 @@ export function ResolutionCard({
               onClick={() =>
                 onChange({
                   resolutionScale: preset.id,
+                  targetWidth: preset.width > 0 ? preset.width : undefined,
+                  targetHeight: preset.height !== undefined ? preset.height : (preset.width > 0 ? -2 : undefined),
                   isCustomResolution: false,
-                  customScaleWidth: undefined,
-                  gifScaleWidth: preset.width,
+                  customScaleWidth: preset.width > 0 ? preset.width : undefined,
+                  gifScaleWidth: preset.width > 0 ? preset.width : undefined,
                 })
               }
               className={cn(
@@ -101,14 +103,17 @@ export function ResolutionCard({
         {!is3GPH263 && (
           <button
             type="button"
-            onClick={() =>
+            onClick={() => {
+              const defaultW = options.customScaleWidth || (isGif ? 480 : (nativeWidth || 1280));
               onChange({
                 resolutionScale: 'custom',
+                targetWidth: defaultW,
+                targetHeight: -2,
                 isCustomResolution: true,
-                customScaleWidth: options.customScaleWidth || (isGif ? 480 : (nativeWidth || 1280)),
-                gifScaleWidth: options.customScaleWidth || (isGif ? 480 : (nativeWidth || 1280)),
-              })
-            }
+                customScaleWidth: defaultW,
+                gifScaleWidth: defaultW,
+              });
+            }}
             className={cn(
               'p-2 text-left rounded-md border transition-colors select-none',
               isCustomScale
@@ -139,6 +144,8 @@ export function ResolutionCard({
             onChange={(e) => {
               const val = Math.max(100, Math.min(3840, parseInt(e.target.value, 10) || 100));
               onChange({
+                targetWidth: val,
+                targetHeight: -2,
                 customScaleWidth: val,
                 gifScaleWidth: val,
                 isCustomResolution: true,

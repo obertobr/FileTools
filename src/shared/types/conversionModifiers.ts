@@ -62,18 +62,22 @@ export interface ConversionModifiers {
   customThreads?: number;
   isCustomThreads?: boolean;
 
-  // Video Quality & Scale
+  // Video Quality & Scale (targetCrf decouples quality preset from engine internals)
   qualityPreset?: QualityPreset;
+  targetCrf?: number;
   customCrf?: number;
   isCustomQuality?: boolean;
 
-  // Framerate (FPS)
+  // Framerate (FPS) (targetFps decouples framerate from engine internals)
   gifFps?: number;
+  targetFps?: number;
   customFps?: number;
   isCustomFps?: boolean;
 
-  // Resolution
+  // Resolution (Canonical dimensions decouple modifiers from specific engine implementations)
   resolutionScale?: ResolutionScale;
+  targetWidth?: number;
+  targetHeight?: number;
   customScaleWidth?: number;
   isCustomResolution?: boolean;
   gifScaleWidth?: number;

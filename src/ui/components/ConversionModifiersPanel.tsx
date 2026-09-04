@@ -453,8 +453,10 @@ export function ConversionModifiersPanel({
                               key={q.id}
                               type="button"
                               onClick={() => {
+                                const crfVal = q.id === 'original' ? 18 : (q.id === 'balanced' ? 23 : (q.id === 'compressed' ? 28 : (currentModifiers.customCrf ?? 23)));
                                 update({
                                   qualityPreset: q.id as QualityPreset,
+                                  targetCrf: crfVal,
                                   isCustomQuality: q.id === 'custom',
                                   customCrf: q.id === 'custom' ? (currentModifiers.customCrf ?? 23) : undefined,
                                 });
@@ -483,7 +485,7 @@ export function ConversionModifiersPanel({
                             value={currentModifiers.customCrf ?? 23}
                             onChange={(e) => {
                               const val = Math.max(0, Math.min(51, parseInt(e.target.value, 10) || 0));
-                              update({ customCrf: val });
+                              update({ customCrf: val, targetCrf: val });
                             }}
                             className="w-20 rounded border border-primary bg-surface-raised px-2 py-0.5 text-xs text-foreground focus:outline-none"
                           />

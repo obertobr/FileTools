@@ -46,7 +46,7 @@ export function FpsCard({ options, onChange, targetFormat, probedMedia }: FpsCar
               <button
                 key={item.value}
                 type="button"
-                onClick={() => onChange({ gifFps: item.value, customFps: item.value, isCustomFps: false })}
+                onClick={() => onChange({ targetFps: item.value, gifFps: item.value, customFps: item.value, isCustomFps: false })}
                 className={cn(
                   'px-1.5 py-1 text-[11px] rounded border transition-colors select-none text-center font-medium',
                   isSelected
@@ -61,7 +61,10 @@ export function FpsCard({ options, onChange, targetFormat, probedMedia }: FpsCar
 
           <button
             type="button"
-            onClick={() => onChange({ isCustomFps: true, customFps: options.customFps || options.gifFps || 18, gifFps: options.customFps || options.gifFps || 18 })}
+            onClick={() => {
+              const val = options.customFps || options.gifFps || 18;
+              onChange({ isCustomFps: true, targetFps: val, customFps: val, gifFps: val });
+            }}
             className={cn(
               'px-1.5 py-1 text-[11px] rounded border transition-colors select-none text-center font-medium',
               isCustomFps
@@ -83,7 +86,7 @@ export function FpsCard({ options, onChange, targetFormat, probedMedia }: FpsCar
               value={options.customFps || 18}
               onChange={(e) => {
                 const val = Math.max(1, Math.min(120, parseInt(e.target.value, 10) || 1));
-                onChange({ customFps: val, gifFps: val, isCustomFps: true });
+                onChange({ targetFps: val, customFps: val, gifFps: val, isCustomFps: true });
               }}
               className="w-20 rounded border border-primary bg-surface-raised px-2 py-0.5 text-xs text-foreground focus:outline-none"
             />
@@ -179,7 +182,7 @@ export function FpsCard({ options, onChange, targetFormat, probedMedia }: FpsCar
               key={item.id}
               type="button"
               onClick={() => {
-                onChange({ customFps: item.fps, gifFps: item.fps, isCustomFps: false });
+                onChange({ targetFps: item.fps, customFps: item.fps, gifFps: item.fps, isCustomFps: false });
               }}
               className={cn(
                 'p-2 text-left rounded-md border transition-colors select-none',
@@ -196,13 +199,15 @@ export function FpsCard({ options, onChange, targetFormat, probedMedia }: FpsCar
 
         <button
           type="button"
-          onClick={() =>
-            onChange({
-              isCustomFps: true,
-              customFps: options.customFps || probedFps || 30,
-              gifFps: options.customFps || probedFps || 30,
-            })
-          }
+            onClick={() => {
+              const val = options.customFps || probedFps || 30;
+              onChange({
+                isCustomFps: true,
+                targetFps: val,
+                customFps: val,
+                gifFps: val,
+              });
+            }}
           className={cn(
             'p-2 text-left rounded-md border transition-colors select-none',
             isCustomFps
@@ -225,7 +230,7 @@ export function FpsCard({ options, onChange, targetFormat, probedMedia }: FpsCar
             value={options.customFps || 30}
             onChange={(e) => {
               const val = Math.max(1, Math.min(120, parseInt(e.target.value, 10) || 1));
-              onChange({ customFps: val, gifFps: val, isCustomFps: true });
+              onChange({ targetFps: val, customFps: val, gifFps: val, isCustomFps: true });
             }}
             className="w-20 rounded border border-primary bg-surface-raised px-2 py-0.5 text-xs text-foreground focus:outline-none"
           />

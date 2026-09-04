@@ -1,4 +1,4 @@
-﻿/**
+/**
  * src/modules/remux.ts
  *
  * Ultra-fast Stream Copy (Remuxing) Engine.
@@ -49,7 +49,7 @@ export const RemuxModule: IModule = {
     version: '1.0.0',
     description: 'Copia os fluxos de vídeo e áudio diretamente para o novo contêiner sem re-encodificar. Instantâneo (< 1s) e com 0% de perda de qualidade.',
     category: 'video',
-    supportedModifiers: ['audio_tracks', 'subtitles', 'threads'],
+    supportedModifiers: ['audio_tracks', 'subtitles'],
     supportedConversions: [
       {
         from: ['.mkv', '.mp4', '.mov', '.m4v'],
@@ -93,10 +93,27 @@ export const RemuxModule: IModule = {
 
     await ffmpeg.writeFile(inputPath, fileData);
 
-    context.onProgress(40, 'Copiando fluxos de vídeo e áudio...');
+    const options = (inputs.modifiers as any) || (inputs.options as any) || undefined;
+    let streamMapArgs: string[] = [];
+    if (options?.activeCategories?.includes('audio_tracks')) {
+      const selected = options.selectedAudioTracks ?? [];
+      if (selected.length === 0) {
+        streamMapArgs = ['-map', '0:v:0', '-an'];
+      } else {
+        streamMapArgs = ['-map', '0:v:0', ...selected.flatMap((idx: number) => ['-map', `0:a:${idx}?`])];
+      }
+    }
+    if (options?.activeCategories?.includes('subtitles')) {
+      const selectedSubs = options.selectedSubtitleTracks ?? [];
+      if (!options.keepAllSubtitles && selectedSubs.length === 0) {
+        streamMapArgs.push('-sn');
+      } else if (selectedSubs.length > 0) {
+        streamMapArgs.push(...selectedSubs.flatMap((idx: number) => ['-map', `0:s:${idx}?`]));
+      }
+    }
 
     // Stream copy command: -c copy -movflags +faststart
-    const args = ['-i', inputPath, '-c', 'copy', '-movflags', '+faststart', outputPath];
+    const args = ['-i', inputPath, ...streamMapArgs, '-c', 'copy', '-movflags', '+faststart', outputPath];
     context.onLog(`[Remux] Executando: ffmpeg ${args.join(' ')}`);
 
     const exitCode = await ffmpeg.exec(args);

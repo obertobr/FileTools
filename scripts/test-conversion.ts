@@ -256,10 +256,21 @@ async function main() {
         }
         if (optionOverrides.resolution) {
           pool = pool.filter((p: any) => p.id !== 'resolution');
+          const res = optionOverrides.resolution;
+          const wMap: Record<string, { w: number; h?: number }> = {
+            '1080p': { w: 1920, h: -2 },
+            '720p': { w: 1280, h: -2 },
+            '480p': { w: 854, h: -2 },
+            '320p': { w: 480, h: -2 },
+            'cif': { w: 352, h: 288 },
+            'qcif': { w: 176, h: 144 },
+            'sub-qcif': { w: 128, h: 96 },
+          };
+          const dims = wMap[res] || { w: parseInt(res, 10) || 1280, h: -2 };
           pool.push({
             id: 'resolution',
-            description: `Resolução customizada (${optionOverrides.resolution})`,
-            patch: { resolutionScale: optionOverrides.resolution },
+            description: `Resolução customizada (${res})`,
+            patch: { resolutionScale: res, targetWidth: dims.w, targetHeight: dims.h },
           });
         }
         if (optionOverrides.fps) {
@@ -267,15 +278,17 @@ async function main() {
           pool.push({
             id: 'fps',
             description: `FPS customizado (${optionOverrides.fps})`,
-            patch: { customFps: optionOverrides.fps, isCustomFps: true },
+            patch: { customFps: optionOverrides.fps, targetFps: optionOverrides.fps, isCustomFps: true },
           });
         }
         if (optionOverrides.quality) {
           pool = pool.filter((p: any) => p.id !== 'quality');
+          const q = optionOverrides.quality;
+          const crfVal = q === 'original' ? 18 : (q === 'balanced' ? 23 : (q === 'compressed' ? 28 : (parseInt(q, 10) || 23)));
           pool.push({
             id: 'quality',
-            description: `Qualidade customizada (${optionOverrides.quality})`,
-            patch: { qualityPreset: optionOverrides.quality },
+            description: `Qualidade customizada (${q})`,
+            patch: { qualityPreset: q, targetCrf: crfVal },
           });
         }
 

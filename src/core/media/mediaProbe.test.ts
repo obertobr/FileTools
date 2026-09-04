@@ -147,11 +147,15 @@ describe('Media Probe & Container Support', () => {
     expect(isModifierIncompatibleWithEngine('video_codec', 'stream-copy')).toBe(true);
     expect(isModifierIncompatibleWithEngine('audio_merge', 'stream-copy')).toBe(true);
 
-    // Threads or audio_tracks are not incompatible
-    expect(isModifierIncompatibleWithEngine('threads', 'stream-copy')).toBe(false);
+    // stream-copy does not encode, so threads is incompatible, while audio_tracks is supported
+    expect(isModifierIncompatibleWithEngine('threads', 'stream-copy')).toBe(true);
     expect(isModifierIncompatibleWithEngine('audio_tracks', 'stream-copy')).toBe(false);
 
-    // Transcoder engines (ffmpeg) are compatible with all options
+    // Single-thread engine ffmpeg-core does not support threads, whereas ffmpeg-core-mt does
+    expect(isModifierIncompatibleWithEngine('threads', 'ffmpeg-core')).toBe(true);
+    expect(isModifierIncompatibleWithEngine('threads', 'ffmpeg-core-mt')).toBe(false);
+
+    // Transcoder engines support fps
     expect(isModifierIncompatibleWithEngine('fps', 'ffmpeg-core-mt')).toBe(false);
     expect(isModifierIncompatibleWithEngine('fps', 'ffmpeg-core')).toBe(false);
   });

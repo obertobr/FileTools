@@ -139,36 +139,26 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
     balanced: '23',
     compressed: '28',
   };
-  const crfVal = options?.customCrf !== undefined
-    ? String(options.customCrf)
-    : (crfMap[options?.qualityPreset || 'original'] || '18');
+  const crfVal = options?.targetCrf !== undefined
+    ? String(options.targetCrf)
+    : (options?.customCrf !== undefined
+      ? String(options.customCrf)
+      : (crfMap[options?.qualityPreset || 'original'] || '18'));
 
-  // Video resolution scale filter
+  // Video resolution scale filter: decoupled from preset labels by receiving canonical targetWidth and targetHeight
   let videoScaleFilter: string[] = [];
   if (options?.activeCategories?.includes('resolution')) {
-    if (options.isCustomResolution && options.customScaleWidth) {
-      videoScaleFilter = ['-vf', `scale=${options.customScaleWidth}:-2`];
-    } else if (options.resolutionScale === '1080p') {
-      videoScaleFilter = ['-vf', 'scale=1920:-2'];
-    } else if (options.resolutionScale === '720p') {
-      videoScaleFilter = ['-vf', 'scale=1280:-2'];
-    } else if (options.resolutionScale === '480p') {
-      videoScaleFilter = ['-vf', 'scale=854:-2'];
-    } else if (options.resolutionScale === '320p') {
-      videoScaleFilter = ['-vf', 'scale=480:-2'];
-    } else if (options.resolutionScale === 'cif') {
-      videoScaleFilter = ['-s', '352x288'];
-    } else if (options.resolutionScale === 'qcif') {
-      videoScaleFilter = ['-s', '176x144'];
-    } else if (options.resolutionScale === 'sub-qcif') {
-      videoScaleFilter = ['-s', '128x96'];
+    const width = options.targetWidth || options.customScaleWidth || options.gifScaleWidth;
+    const height = options.targetHeight ?? -2;
+    if (width && width > 0) {
+      videoScaleFilter = ['-vf', `scale=${width}:${height}`];
     }
   }
 
-  // Video framerate (FPS) override
+  // Video framerate (FPS) override: decoupled by receiving canonical targetFps
   let videoFpsArgs: string[] = [];
   if (options?.activeCategories?.includes('fps')) {
-    const targetFps = options.customFps || options.gifFps;
+    const targetFps = options.targetFps || options.customFps || options.gifFps;
     if (targetFps && targetFps > 0) {
       videoFpsArgs = ['-r', String(targetFps)];
     }
@@ -486,7 +476,6 @@ export const FFmpegModule: IModule = {
       'quality',
       'fps',
       'resolution',
-      'threads',
       'audio_tracks',
       'audio_merge',
       'subtitles',

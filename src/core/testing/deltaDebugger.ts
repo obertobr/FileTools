@@ -119,7 +119,7 @@ export function getApplicableModifierPool(
     pool.push({
       id: 'fps',
       description: isGifOutput ? 'Taxa de quadros do GIF (15 fps)' : 'Taxa de quadros customizada (24 fps)',
-      patch: isGifOutput ? { gifFps: 15 } : { customFps: 24, isCustomFps: true },
+      patch: isGifOutput ? { gifFps: 15, targetFps: 15 } : { customFps: 24, targetFps: 24, isCustomFps: true },
     });
   }
 
@@ -134,10 +134,10 @@ export function getApplicableModifierPool(
         ? 'Resolução CIF 3GPP (352x288)'
         : 'Resolução 720p',
       patch: isGifOutput
-        ? { gifScaleWidth: 320 }
+        ? { gifScaleWidth: 320, targetWidth: 320, targetHeight: -1 }
         : is3GP
-        ? { resolutionScale: 'cif' }
-        : { resolutionScale: '720p' },
+        ? { resolutionScale: 'cif', targetWidth: 352, targetHeight: 288 }
+        : { resolutionScale: '720p', targetWidth: 1280, targetHeight: -2 },
     });
   }
 
@@ -146,7 +146,7 @@ export function getApplicableModifierPool(
     pool.push({
       id: 'quality',
       description: 'Preset de qualidade balanceada',
-      patch: { qualityPreset: 'balanced' },
+      patch: { qualityPreset: 'balanced', targetCrf: 23 },
     });
   }
 

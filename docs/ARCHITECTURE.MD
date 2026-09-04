@@ -207,6 +207,13 @@ O sistema de opções avançadas (Pilha de Modificadores (Modifier Stack)) obede
    - O motor de conversão honra com precisão a escolha explícita do usuário (se o usuário escolheu H.263, executa com H.263; se escolheu MPEG-4, executa com MPEG-4).
 3. **Resiliência a Cargas Arbitrárias**: O sistema deve se auto-adaptar a qualquer complexidade de arquivo de entrada (desde amostras ultra-leves até vídeos de alta densidade 1080p e 4K multifaixas), dimensionando buffers e threads para rodar com eficiência máxima sem estourar limites de memória.
 
+### 12.5. Princípio de Desacoplamento de Modificadores e Harmonia de Threads
+1. **Desacoplamento Canônico**: Os motores de conversão não devem conter escadas de condicionais (`if/else`) baseadas em rótulos de interface de usuário (como `'1080p'`, `'cif'`, etc.). Os modificadores são responsáveis por traduzir qualquer preset ou entrada manual em parâmetros operacionais canônicos (`targetWidth`, `targetHeight`, `targetFps`, `targetCrf`). O motor simplesmente recebe esses valores numéricos e aplica o filtro correspondente (`scale=${width}:${height}`, `-r ${fps}`, `-crf ${crf}`). Isso torna os motores universalmente extensíveis e 100% desacoplados de mudanças de interface.
+2. **Harmonia de Threads e Integridade de Capacidades**:
+   - É terminantemente proibido limitar ou sobrescrever de forma estática o número de threads (`-threads 1`) dentro de um motor se o modificador de threads estiver disponível ou ativo. Se um motor declara suporte a threads, ele deve respeitar estritamente a escolha do usuário ou o dimensionamento dinâmico calculado pelo hardware optimizer.
+   - Motores mono-thread (ex: `ffmpeg-core`) e motores sem re-encodificação (ex: `stream-copy` / `remux`) jamais devem declarar `threads` em seu `supportedModifiers`.
+   - Discrepâncias entre o que o modificador oferece e o que o motor de execução efetivamente executa violam o princípio de transparência e confiabilidade do FileTools.
+
 
 
 ---

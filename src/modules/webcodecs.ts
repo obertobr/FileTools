@@ -1,4 +1,4 @@
-﻿/**
+/**
  * src/modules/webcodecs.ts
  *
  * Hardware-accelerated Video Transcoder using the native WebCodecs API
@@ -38,7 +38,7 @@ export const WebCodecsModule: IModule = {
     version: '1.0.0',
     description: 'Transcodificação de alta velocidade com aceleração por hardware na GPU (NVENC, QuickSync, Apple Silicon).',
     category: 'video',
-    supportedModifiers: ['video_codec', 'quality', 'fps', 'resolution'],
+    supportedModifiers: ['quality'],
     supportedConversions: [
       {
         // MP4Box is specifically an ISO Base Media File Format parser (MP4 / M4V)
@@ -90,6 +90,7 @@ export const WebCodecsModule: IModule = {
     const fileData = inputs.fileData as Uint8Array;
     const originalName = inputs.originalName as string;
     const targetFormat = inputs.targetFormat as string;
+    const options = (inputs.modifiers as any) || (inputs.options as any) || undefined;
 
     if (!fileData || !originalName || !targetFormat) {
       throw new Error('WebCodecs module requires fileData (Uint8Array), originalName, and targetFormat.');
@@ -225,11 +226,18 @@ export const WebCodecsModule: IModule = {
               },
             });
 
+            const bitrateMap: Record<string, number> = {
+              original: 6_000_000,
+              balanced: 2_500_000,
+              compressed: 1_200_000,
+            };
+            const bitrate = options?.qualityPreset ? (bitrateMap[options.qualityPreset] || 2_500_000) : 2_500_000;
+
             videoEncoder.configure({
               codec: targetCodec,
               width,
               height,
-              bitrate: 2_500_000,
+              bitrate,
               framerate: 30,
               hardwareAcceleration: 'prefer-hardware',
             });

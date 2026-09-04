@@ -226,7 +226,7 @@ export function ConvertPanel({
           targetFormat: '.' + target.replace(/^\.+/, '').toLowerCase(),
           originalName: file.name,
           options: conversionModifiers,
-          userMaxThreads: conversionModifiers.threadsMode === 'custom' ? conversionModifiers.userMaxThreads : undefined,
+          userMaxThreads: conversionModifiers.threadsMode === 'custom' ? (conversionModifiers.customThreads ?? conversionModifiers.userMaxThreads) : undefined,
         },
         (p, msg) => {
           setProgress(p);

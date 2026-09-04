@@ -27,31 +27,36 @@ export function getOptimalThreadProfile(
     ? (navigator as any).deviceMemory || 4
     : 4;
 
-  const userCap = options?.userMaxThreads ? Math.max(1, Math.min(options.userMaxThreads, logicalCores)) : undefined;
+  const userCap = options?.userMaxThreads ? Math.max(1, Math.floor(options.userMaxThreads)) : undefined;
   const to = targetFormat.toLowerCase();
 
   let decoderThreads: number;
   let encoderThreads: number;
   let description: string;
 
-  if (to === '.webm') {
+  if (userCap !== undefined) {
+    // User explicitly customized threads via the modifier: strictly respect user choice
+    encoderThreads = userCap;
+    decoderThreads = Math.min(userCap, 2);
+    description = `Alocação customizada (${encoderThreads} threads de codificação, ${decoderThreads} de decodificação)`;
+  } else if (to === '.webm') {
     // VP8 with capped decoder threads (1 to 2) can safely utilize 2 to 4 encoder threads in WASM
-    decoderThreads = userCap ? Math.min(userCap, 2) : Math.min(Math.max(1, Math.floor(logicalCores / 4)), 2);
-    encoderThreads = userCap ? Math.min(userCap, 4) : Math.min(logicalCores, 4);
+    decoderThreads = Math.min(Math.max(1, Math.floor(logicalCores / 4)), 2);
+    encoderThreads = Math.min(logicalCores, 4);
     description = `VP8 Multi-Core Realtime (decodificador: ${decoderThreads} threads, codificador: ${encoderThreads} threads)`;
   } else if (to === '.mp4' || to === '.mkv' || to === '.mov' || to === '.ts') {
     // libx264 with slice-threading in 32-bit WASM runs safest and fastest capped at 4 threads, avoiding pthread pool starvation
-    decoderThreads = userCap ? Math.min(userCap, 2) : Math.min(Math.max(1, Math.floor(logicalCores / 4)), 2);
-    encoderThreads = userCap ? Math.min(userCap, 4) : Math.min(logicalCores, 4);
+    decoderThreads = Math.min(Math.max(1, Math.floor(logicalCores / 4)), 2);
+    encoderThreads = Math.min(logicalCores, 4);
     description = `libx264 Slice-Threaded Multi-Core (decodificador: ${decoderThreads} threads, codificador: ${encoderThreads} threads)`;
   } else if (to === '.gif') {
-    decoderThreads = userCap ? Math.min(userCap, 2) : Math.min(logicalCores, 2);
-    encoderThreads = userCap ? Math.min(userCap, 4) : Math.min(logicalCores, 4);
+    decoderThreads = Math.min(logicalCores, 2);
+    encoderThreads = Math.min(logicalCores, 4);
     description = `Renderizador GIF Multi-Core (${encoderThreads} threads)`;
   } else {
     // Audio or general
-    decoderThreads = userCap ? Math.min(userCap, 2) : Math.min(logicalCores, 2);
-    encoderThreads = userCap ? Math.min(userCap, 4) : Math.min(logicalCores, 4);
+    decoderThreads = Math.min(logicalCores, 2);
+    encoderThreads = Math.min(logicalCores, 4);
     description = `Multi-Core Geral (${encoderThreads} threads)`;
   }
 

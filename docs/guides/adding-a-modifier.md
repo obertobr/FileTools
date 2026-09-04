@@ -241,3 +241,18 @@ Ao adicionar ou modificar modificadores que interajam com codecs ou formatos res
    - Ocultar entradas inválidas (ex: dimensões arbitrárias que causariam aborto no encoder).
    - Exibir nota explicativa orientando o usuário de que selecionar outro codec (ex: MPEG-4) desbloqueia resoluções maiores (HD 720p/1080p).
 3. **Priorize Expandir Opções, Jamais Remover:** O princípio central do FileTools é prover a maior gama possível de configurações aos usuários avançados, garantindo que todas as combinações funcionem em perfeita harmonia.
+
+---
+
+## Passo 9: Princípio de Desacoplamento e Harmonia de Threads (Mandatório)
+
+1. **Parâmetros Canônicos Diretos nos Motores**:
+   - Os cards de modificadores e a interface **nunca** devem forçar os motores a terem escadas de `if/else` com strings de presets de interface (como `if (res === '1080p')`, `else if (res === 'cif')`).
+   - O modificador DEVE traduzir as opções do usuário e enviar parâmetros canônicos operacionais diretos na interface `ConversionModifiers`:
+     - **Resolução**: `targetWidth` e `targetHeight` (ex: `1920` e `-2` para 1080p; `352` e `288` para CIF). O motor simplesmente aplica `-vf scale=${width}:${height}` de forma universal, ficando 100% agnóstico aos nomes de botões na UI.
+     - **FPS**: `targetFps` (ex: `24`, `30`, `60`). O motor simplesmente executa `-r ${targetFps}`.
+     - **Qualidade**: `targetCrf` (ex: `18`, `23`, `28`). O motor injeta `-crf ${targetCrf}` diretamente sem precisar de tabelas de mapeamento redundantes.
+2. **Harmonia de Threads e Ausência de Discrepâncias**:
+   - Motores que declaram `threads` em `supportedModifiers` **devem** respeitar o modificador de threads tanto no codificador quanto no decodificador.
+   - É terminantemente **proibido** travar parâmetros silenciosamente em linha de comando (ex: `'-threads', '1'`) se o modificador de threads estiver ativo ou se o hardware possuir múltiplos núcleos.
+   - Motores sem capacidade multi-thread (como single-thread WASM `ffmpeg-core` ou stream-copy `remux`) **nunca** devem declarar `threads` em seu manifesto `supportedModifiers`. Qualquer discrepância entre o que o modificador oferece e o que o motor de execução efetivamente realiza é estritamente proibida.
