@@ -2,12 +2,13 @@
  * src/modules/ffmpeg.ts
  *
  * FFmpeg WASM conversion engine (Single-Thread).
- * Uses @ffmpeg/ffmpeg 0.12 with standard @ffmpeg/core.
- * High compatibility fallback engine running on single CPU thread.
+ * Supports custom FPS, custom resolution scale, custom CRF quality,
+ * and real probed stream mapping.
  */
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL } from '@ffmpeg/util';
 import type { IModule, ExecutionContext } from '@/shared/types/module';
+import type { ConversionOptions } from '@/shared/types/conversionOptions';
 
 let ffmpegInstance: FFmpeg | null = null;
 let ffmpegLoaded = false;
@@ -84,12 +85,59 @@ async function getFFmpeg(context: ExecutionContext): Promise<FFmpeg> {
   return ffmpegInstance;
 }
 
-function getConversionArgs(inputExt: string, outputExt: string): string[] {
+function getConversionArgs(inputExt: string, outputExt: string, options?: ConversionOptions): string[] {
   const from = inputExt.toLowerCase();
   const to = outputExt.toLowerCase();
 
+  // Audio track mapping
+  let audioMapFlags: string[];
+  const isAudioCategoryActive = options?.activeCategories?.includes('audio_tracks');
+
+  if (isAudioCategoryActive) {
+    const selected = options?.selectedAudioTracks ?? [];
+    if (selected.length === 0) {
+      audioMapFlags = ['-an'];
+    } else {
+      audioMapFlags = ['-map', '0:v:0', ...selected.flatMap((idx) => ['-map', `0:a:${idx}?`])];
+    }
+  } else {
+    audioMapFlags = ['-map', '0:v:0', '-map', '0:a?'];
+  }
+
+  // Quality CRF tuning
+  const crfMap: Record<string, string> = {
+    original: '18',
+    balanced: '23',
+    compressed: '28',
+  };
+  const crfVal = options?.customCrf !== undefined
+    ? String(options.customCrf)
+    : (crfMap[options?.qualityPreset || 'original'] || '18');
+
+  // Video resolution scale filter
+  let videoScaleFilter: string[] = [];
+  if (options?.activeCategories?.includes('resolution')) {
+    if (options.isCustomResolution && options.customScaleWidth) {
+      videoScaleFilter = ['-vf', `scale=${options.customScaleWidth}:-2`];
+    } else if (options.resolutionScale === '1080p') {
+      videoScaleFilter = ['-vf', 'scale=1920:-2'];
+    } else if (options.resolutionScale === '720p') {
+      videoScaleFilter = ['-vf', 'scale=1280:-2'];
+    } else if (options.resolutionScale === '480p') {
+      videoScaleFilter = ['-vf', 'scale=854:-2'];
+    }
+  }
+
   if (to === '.gif') {
-    return ['-vf', 'fps=10,scale=480:-1:flags=lanczos', '-loop', '0'];
+    const fps = options?.customFps || options?.gifFps || 10;
+    const scaleWidth = options?.customScaleWidth !== undefined ? options.customScaleWidth : (options?.gifScaleWidth ?? 480);
+    const vfParts = [`fps=${fps}`];
+    if (scaleWidth > 0) {
+      vfParts.push(`scale=${scaleWidth}:-1:flags=lanczos`);
+    } else {
+      vfParts.push('flags=lanczos');
+    }
+    return ['-vf', vfParts.join(','), '-loop', '0'];
   }
 
   const videoExts = ['.mp4', '.mkv', '.webm', '.mov', '.avi', '.m4v'];
@@ -107,9 +155,19 @@ function getConversionArgs(inputExt: string, outputExt: string): string[] {
     return [];
   }
 
-  if (to === '.webm') return ['-c:v', 'libvpx', '-b:v', '1M', '-c:a', 'libvorbis'];
+  if (to === '.webm') {
+    const isMute = isAudioCategoryActive && (options?.selectedAudioTracks?.length === 0);
+    const audioFlags = isMute ? ['-an'] : ['-c:a', 'libvorbis', ...audioMapFlags];
+    return ['-c:v', 'libvpx', '-b:v', '1.5M', ...videoScaleFilter, ...audioFlags];
+  }
+
   if (to === '.mkv') return ['-c', 'copy'];
-  if (to === '.mp4') return ['-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-c:a', 'aac'];
+
+  if (to === '.mp4') {
+    const isMute = isAudioCategoryActive && (options?.selectedAudioTracks?.length === 0);
+    const audioFlags = isMute ? ['-an'] : ['-c:a', 'aac', ...audioMapFlags];
+    return ['-c:v', 'libx264', '-preset', 'fast', '-crf', crfVal, ...videoScaleFilter, ...audioFlags];
+  }
 
   return [];
 }
@@ -164,6 +222,7 @@ export const FFmpegModule: IModule = {
     const fileData = inputs.fileData as Uint8Array;
     const originalName = inputs.originalName as string;
     const targetFormat = inputs.targetFormat as string;
+    const options = (inputs.options as ConversionOptions) || undefined;
 
     if (!fileData || !originalName || !targetFormat) {
       throw new Error('FFmpeg module requires fileData (Uint8Array), originalName, and targetFormat.');
@@ -183,7 +242,7 @@ export const FFmpegModule: IModule = {
       context.onProgress(0, 'Carregando arquivo...');
       await ffmpeg.writeFile(inputPath, fileData);
 
-      const convArgs = getConversionArgs(inputExt, outputExt);
+      const convArgs = getConversionArgs(inputExt, outputExt, options);
       const fullArgs = ['-i', inputPath, '-stats', ...convArgs, outputPath];
 
       context.onLog(`[FFmpeg] Executing: ffmpeg ${fullArgs.join(' ')}`);

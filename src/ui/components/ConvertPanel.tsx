@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { AlertCircle, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
 import { UploadDropzone } from './UploadDropzone';
 import { FilePreview } from './FilePreview';
@@ -6,12 +6,15 @@ import { SearchInput } from './SearchInput';
 import { CategoryFilter } from './CategoryFilter';
 import { FormatSelector } from './FormatSelector';
 import { EngineSelector } from './EngineSelector';
+import { ConversionOptionsPanel } from './ConversionOptionsPanel';
 import { ConversionProgress } from './ConversionProgress';
 import { DownloadResult } from './DownloadResult';
 import { Button, Card, Typography } from '@/ui/components/core';
 import { FORMATS, describeFile, type Format } from '@/lib/formats';
 import { resolvePossibleConversions, resolveAvailableEngines, type EngineOption } from '@/modules/registry';
 import { WorkerManager } from '@/core/engine/WorkerManager';
+import { type ConversionOptions, DEFAULT_CONVERSION_OPTIONS } from '@/shared/types/conversionOptions';
+import { probeMediaData, type MediaProbeResult } from '@/core/media/mediaProbe';
 
 type Status = 'idle' | 'converting' | 'done' | 'error';
 
@@ -30,6 +33,8 @@ export function ConvertPanel({
   const [selected, setSelected] = useState<string | null>(fixedTarget ?? null);
   const [availableEngines, setAvailableEngines] = useState<EngineOption[]>([]);
   const [selectedEngineId, setSelectedEngineId] = useState<string | null>(null);
+  const [conversionOptions, setConversionOptions] = useState<ConversionOptions>(DEFAULT_CONVERSION_OPTIONS);
+  const [probedMedia, setProbedMedia] = useState<MediaProbeResult | undefined>();
   const [status, setStatus] = useState<Status>('idle');
   const [progress, setProgress] = useState(0);
   const [progressMessage, setProgressMessage] = useState<string | undefined>();
@@ -102,10 +107,41 @@ export function ConvertPanel({
     };
   }, [sourceExt, target, file]);
 
+  
+  // Asynchronously probe real media tracks (audio, subtitles, video) on file load
+  useEffect(() => {
+    if (!file) {
+      setProbedMedia(undefined);
+      return;
+    }
+    const slice = file.slice(0, Math.min(file.size, 1024 * 1024));
+    slice.arrayBuffer().then((buf) => {
+      const result = probeMediaData(new Uint8Array(buf));
+      setProbedMedia(result);
+      if (result.audioStreams.length > 0) {
+        setConversionOptions((prev) => ({
+          ...prev,
+          probedMedia: result,
+          selectedAudioTracks: result.audioStreams.map((_, idx) => idx),
+          selectedSubtitleTracks: result.subtitleStreams.map((_, idx) => idx),
+        }));
+      } else {
+        setConversionOptions((prev) => ({
+          ...prev,
+          probedMedia: result,
+          selectedSubtitleTracks: result.subtitleStreams.map((_, idx) => idx),
+        }));
+      }
+    }).catch((err) => {
+      console.warn('[ConvertPanel] Falha ao analisar contêiner de mídia:', err);
+    });
+  }, [file]);
+
   const activeEngine = availableEngines.find((e) => e.moduleId === selectedEngineId) ?? availableEngines[0];
 
   function reset() {
     setFile(null);
+    setProbedMedia(undefined);
     setStatus('idle');
     setProgress(0);
     setProgressMessage(undefined);
@@ -114,6 +150,7 @@ export function ConvertPanel({
     setErrorMessage('');
     setFailedEngineName('');
     setSelectedEngineId(null);
+    setConversionOptions(DEFAULT_CONVERSION_OPTIONS);
     if (outputUrl) URL.revokeObjectURL(outputUrl);
     setOutputUrl(null);
     setOutputSize(0);
@@ -149,6 +186,8 @@ export function ConvertPanel({
           fileData: fileData,
           targetFormat: '.' + target.replace(/^\.+/, '').toLowerCase(),
           originalName: file.name,
+          options: conversionOptions,
+          userMaxThreads: conversionOptions.threadsMode === 'custom' ? conversionOptions.userMaxThreads : undefined,
         },
         (p, msg) => {
           setProgress(p);
@@ -167,7 +206,7 @@ export function ConvertPanel({
         setOutputUrl(URL.createObjectURL(blob));
         setOutputSize(outputData.byteLength);
       } else {
-        throw new Error('Nenhum dado de saída retornado pelo motor de conversão.');
+        throw new Error('Nenhum dado de sa�da retornado pelo motor de convers�o.');
       }
       
       setStatus('done');
@@ -219,11 +258,22 @@ export function ConvertPanel({
       )}
 
       {status === 'idle' && target && availableEngines.length > 0 && (
-        <EngineSelector
-          engines={availableEngines}
-          selectedEngineId={activeEngine?.moduleId ?? null}
-          onSelectEngine={setSelectedEngineId}
-        />
+        <>
+          <EngineSelector
+            engines={availableEngines}
+            selectedEngineId={activeEngine?.moduleId ?? null}
+            onSelectEngine={setSelectedEngineId}
+          />
+
+          <ConversionOptionsPanel
+            targetFormat={target}
+            sourceExt={sourceExt ?? undefined}
+            options={conversionOptions}
+            onChange={setConversionOptions}
+            isMultiThreadEngine={activeEngine?.acceleration === 'cpu-multithread'}
+            probedMedia={probedMedia}
+          />
+        </>
       )}
 
       {status === 'idle' && (
@@ -256,49 +306,46 @@ export function ConvertPanel({
       )}
 
       {status === 'error' && (
-        <Card variant="alert-destructive" className="px-4 py-3.5 space-y-3">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="size-4 text-destructive shrink-0" strokeWidth={1.75} />
-            <Typography variant="body" className="font-medium text-foreground">
-              Falha na conversão com {failedEngineName || 'o motor selecionado'}
-            </Typography>
+        <Card variant="alert-destructive" className="p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="size-5 text-destructive shrink-0 mt-0.5" />
+            <div className="space-y-1 min-w-0">
+              <Typography variant="h3" color="destructive">
+                Falha na convers�o com {failedEngineName || 'o motor selecionado'}
+              </Typography>
+              <Typography variant="caption" color="muted" className="block whitespace-pre-wrap break-words">
+                {errorMessage}
+              </Typography>
+            </div>
           </div>
 
-          <Typography variant="code" color="muted" className="text-[12px] block">
-            {errorMessage || 'O arquivo não pôde ser processado por este motor.'}
-          </Typography>
-
-          {/* User Decision: Offer alternate compatible engines if available */}
-          {availableEngines.filter(e => e.moduleName !== failedEngineName).length > 0 && (
-            <div className="pt-1">
-              <Typography variant="caption" color="muted" className="mb-2 block font-medium">
-                Deseja tentar com outro motor compatível?
+          {/* Engine alternatives if any */}
+          {availableEngines.filter(e => e.moduleId !== selectedEngineId).length > 0 && (
+            <div className="pt-2 border-t border-destructive/20">
+              <Typography variant="caption" className="font-semibold block mb-1.5">
+                Voc� pode tentar com outro motor compat�vel:
               </Typography>
               <div className="flex flex-wrap gap-2">
                 {availableEngines
-                  .filter(e => e.moduleName !== failedEngineName)
-                  .map(engine => (
+                  .filter(e => e.moduleId !== selectedEngineId)
+                  .map(alt => (
                     <Button
-                      key={engine.moduleId}
+                      key={alt.moduleId}
                       variant="secondary"
                       size="sm"
                       onClick={() => {
-                        setSelectedEngineId(engine.moduleId);
-                        start(engine.moduleId);
+                        setSelectedEngineId(alt.moduleId);
+                        start(alt.moduleId);
                       }}
                     >
-                      {engine.acceleration === 'instant-copy' && '⚡ '}
-                      {engine.acceleration === 'cpu-multithread' && '🚀 '}
-                      {engine.acceleration === 'gpu' && '⚡ '}
-                      {engine.acceleration === 'cpu-singlethread' && '💻 '}
-                      Usar {engine.moduleName}
+                      Tentar com {alt.moduleName}
                     </Button>
                   ))}
               </div>
             </div>
           )}
 
-          {/* Log Viewer Toggle in Error State */}
+          {/* Error log viewer */}
           {logs.length > 0 && (
             <div className="pt-1">
               <button
@@ -307,14 +354,15 @@ export function ConvertPanel({
                 className="focus-ring flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Terminal className="size-3" />
-                <span>{showErrorLogs ? 'Ocultar Logs de Erro' : 'Ver Logs Técnicos do Motor'}</span>
+                <span>{showErrorLogs ? 'Ocultar Terminal de Diagn�stico' : 'Ver Logs de Diagn�stico'}</span>
                 {showErrorLogs ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
               </button>
+
               {showErrorLogs && (
-                <div className="mt-2 rounded-md border border-border bg-black/80 p-2.5 font-mono text-[10px] leading-relaxed text-zinc-300 max-h-40 overflow-y-auto space-y-0.5 select-text">
+                <div className="mt-2 rounded-md border border-border bg-black/80 p-2.5 font-mono text-[11px] text-zinc-300 max-h-40 overflow-y-auto space-y-0.5">
                   {logs.map((log, i) => (
                     <div key={i} className="break-all whitespace-pre-wrap">
-                      <span className="text-destructive mr-1">&gt;</span>
+                      <span className="text-destructive/70 select-none mr-1.5">&gt;</span>
                       {log}
                     </div>
                   ))}
@@ -322,19 +370,8 @@ export function ConvertPanel({
               )}
             </div>
           )}
-
-          <div className="pt-2 border-t border-border">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={reset}
-            >
-              Escolher outro arquivo
-            </Button>
-          </div>
         </Card>
       )}
     </div>
   );
 }
-
