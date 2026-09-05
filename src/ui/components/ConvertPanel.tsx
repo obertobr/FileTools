@@ -223,6 +223,7 @@ export function ConvertPanel({
           targetFormat: '.' + target.replace(/^\.+/, '').toLowerCase(),
           originalName: file.name,
           options: conversionModifiers,
+          modifiers: conversionModifiers,
           userMaxThreads: conversionModifiers.threadsMode === 'custom' ? (conversionModifiers.customThreads ?? conversionModifiers.userMaxThreads) : undefined,
         },
         (p, msg) => {

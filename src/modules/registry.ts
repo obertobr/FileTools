@@ -9,8 +9,7 @@ import { FORMATS } from '@/lib/formats';
 
 import { RemuxModule } from './engines/remux';
 import { MP4BoxModule } from './engines/mp4box';
-import { Mp4MuxerModule } from './engines/mp4-muxer';
-import { WebmMuxerModule } from './engines/webm-muxer';
+import { MediabunnyModule } from './engines/mediabunny';
 import { FFmpegMTModule } from './engines/ffmpeg-mt';
 import { FFmpegModule } from './engines/ffmpeg';
 import { MagickModule } from './engines/magick';
@@ -21,8 +20,7 @@ import { SheetJSModule } from './engines/sheetjs';
 export const ModuleRegistry: Record<string, IModule> = {
   'stream-copy': RemuxModule,
   'mp4box': MP4BoxModule,
-  'mp4-muxer': Mp4MuxerModule,
-  'webm-muxer': WebmMuxerModule,
+  'mediabunny': MediabunnyModule,
   'ffmpeg-core-mt': FFmpegMTModule,
   'ffmpeg-core': FFmpegModule,
   'magick-wasm': MagickModule,

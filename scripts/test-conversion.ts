@@ -139,18 +139,50 @@ async function main() {
     return (async () => {
       const reg = await import('/src/modules/registry.ts');
       const convLib = await import('/src/lib/converters.ts');
-
-      const allConvs = convLib.generateConverters(reg.getAllManifests());
       const manifests = reg.getAllManifests();
 
-      const filtered = allConvs.filter((c) => {
-        const matchFrom = !fromFilter || c.from.toLowerCase() === fromFilter;
-        const matchTo = !toFilter || c.to.toLowerCase() === toFilter;
-        return matchFrom && matchTo;
-      });
+      let candidateConversions: { from: string; to: string }[] = [];
+
+      // If a specific engine was targeted, discover ALL conversions that this engine declares in supportedConversions!
+      if (engineFilter) {
+        const targetManifest = manifests.find((m) => m.id === engineFilter);
+        if (targetManifest && targetManifest.supportedConversions) {
+          const pairs: { from: string; to: string }[] = [];
+          for (const rule of targetManifest.supportedConversions) {
+            for (const f of rule.from) {
+              for (const t of rule.to) {
+                const cFrom = f.toLowerCase().replace(/^\./, '');
+                const cTo = t.toLowerCase().replace(/^\./, '');
+                const matchFrom = !fromFilter || cFrom === fromFilter;
+                const matchTo = !toFilter || cTo === toFilter;
+                if (matchFrom && matchTo && cFrom !== cTo) {
+                  pairs.push({ from: cFrom, to: cTo });
+                }
+              }
+            }
+          }
+          const seen = new Set<string>();
+          candidateConversions = pairs.filter((p) => {
+            const key = `${p.from}->${p.to}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        }
+      }
+
+      // Fallback to global converter catalog
+      if (candidateConversions.length === 0) {
+        const filtered = allConvs.filter((c) => {
+          const matchFrom = !fromFilter || c.from.toLowerCase() === fromFilter;
+          const matchTo = !toFilter || c.to.toLowerCase() === toFilter;
+          return matchFrom && matchTo;
+        });
+        candidateConversions = filtered.map((c) => ({ from: c.from.toLowerCase(), to: c.to.toLowerCase() }));
+      }
 
       return {
-        conversions: filtered.map((c) => ({ from: c.from.toLowerCase(), to: c.to.toLowerCase() })),
+        conversions: candidateConversions,
         manifests: manifests.map((m) => ({
           id: m.id,
           name: m.name,
@@ -165,12 +197,20 @@ async function main() {
     isAll: options.all,
   });
 
-  if (plan.conversions.length === 0) {
-    console.log('⚠️ Nenhuma conversão encontrada para os filtros especificados.');
+  // Filter conversions to only those where a valid test fixture exists
+  const runnableConversions = plan.conversions.filter((conv: any) => {
+    if (options.file && fs.existsSync(options.file)) return true;
+    const fixturePath = path.join(projectRoot, 'tests', 'fixtures', `sample.${conv.from}`);
+    return fs.existsSync(fixturePath);
+  });
+
+  if (runnableConversions.length === 0) {
+    console.log('⚠️ Nenhuma conversão executável encontrada para os filtros especificados (verifique se fixtures de teste existem).');
     await browser.close();
     return;
   }
 
+  plan.conversions = runnableConversions;
   console.log(`Total de pares encontrados para teste: ${plan.conversions.length}\n`);
 
   const results = [];
@@ -315,7 +355,98 @@ async function main() {
                 }
               );
               const ok = Boolean(out && (out.outputBlob || (out.outputData && out.outputData.byteLength > 0)));
-              return { success: ok, logs: logs.slice(-6) };
+              if (!ok) {
+                return { success: false, error: 'O motor não gerou nenhum dado de saída (buffer/blob vazio).', logs: logs.slice(-6) };
+              }
+
+              // Post-conversion assertion: verify applied modifiers took effect!
+              const isVideoOutput = ['mp4', 'webm', 'mkv', 'mov', 'avi', 'ts', '3gp', 'm4v'].includes(toExt.toLowerCase());
+              if (isVideoOutput && out) {
+                const blob = out.outputBlob instanceof Blob
+                  ? out.outputBlob
+                  : new Blob([out.outputData!], { type: out.mimeType || 'video/mp4' });
+
+                // 1. Check resolution if targetWidth or resolutionScale was requested
+                let expectedWidth = modifiers?.targetWidth;
+                if (!expectedWidth && modifiers?.customScaleWidth) {
+                  expectedWidth = modifiers.customScaleWidth;
+                }
+                if (!expectedWidth && modifiers?.resolutionScale && modifiers.resolutionScale !== 'original') {
+                  const scaleMap: Record<string, number> = {
+                    '1080p': 1920,
+                    '720p': 1280,
+                    '480p': 854,
+                    '360p': 640,
+                    '320p': 480,
+                    'cif': 352,
+                    'qcif': 176,
+                  };
+                  expectedWidth = scaleMap[modifiers.resolutionScale.toLowerCase()];
+                }
+
+                if (expectedWidth && expectedWidth > 0) {
+                  let probedWidth: number | undefined;
+                  let probedHeight: number | undefined;
+
+                  try {
+                    const { probeMediaData } = await import('/src/core/media/mediaProbe.ts');
+                    const u8Data = out.outputData || new Uint8Array(await blob.arrayBuffer());
+                    const probe = probeMediaData(u8Data);
+                    if (probe && probe.width) {
+                      probedWidth = probe.width;
+                      probedHeight = probe.height;
+                    }
+                  } catch {}
+
+                  // Also check HTML5 video element in browser DOM
+                  try {
+                    const url = URL.createObjectURL(blob);
+                    const vid = document.createElement('video');
+                    vid.preload = 'metadata';
+                    vid.src = url;
+                    await new Promise<void>((resolve) => {
+                      const tm = setTimeout(() => resolve(), 3500);
+                      vid.onloadedmetadata = () => {
+                        clearTimeout(tm);
+                        if (vid.videoWidth) {
+                          probedWidth = vid.videoWidth;
+                          probedHeight = vid.videoHeight;
+                        }
+                        resolve();
+                      };
+                      vid.onerror = () => resolve();
+                    });
+                    URL.revokeObjectURL(url);
+                  } catch {}
+
+                  if (probedWidth !== undefined && Math.abs(probedWidth - expectedWidth) > 2) {
+                    return {
+                      success: false,
+                      error: `ASSERTION FAILED: A resolução do vídeo gerado (${probedWidth}x${probedHeight}) não corresponde à solicitada (${expectedWidth}px)! O motor ignorou o modificador de escala ou manteve a resolução original.`,
+                      logs: logs.slice(-6),
+                    };
+                  }
+                }
+
+                // 2. Check FPS if requested
+                const expectedFps = modifiers?.targetFps || modifiers?.customFps;
+                if (expectedFps && expectedFps > 0 && modifiers?.isCustomFps) {
+                  try {
+                    const { probeMediaData } = await import('/src/core/media/mediaProbe.ts');
+                    const u8Data = out.outputData || new Uint8Array(await blob.arrayBuffer());
+                    const probe = probeMediaData(u8Data);
+                    if (probe && probe.fps && Math.abs(probe.fps - expectedFps) > 1) {
+                      return {
+                        success: false,
+                        error: `ASSERTION FAILED: A taxa de quadros do vídeo gerado (${probe.fps} fps) não corresponde à solicitada (${expectedFps} fps)!`,
+                        logs: logs.slice(-6),
+                      };
+                    }
+                  } catch {}
+                }
+              }
+
+              return { success: true, logs: logs.slice(-6) };
             } catch (err) {
               return { success: false, error: String(err), logs: logs.slice(-6) };
             }

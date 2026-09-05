@@ -155,21 +155,24 @@ describe('Module Registry', () => {
       expect(jpgToWebm[0].moduleId).toBe('ffmpeg-core-mt');
     });
 
-    it('does NOT include MP4Box or WebM Muxer for formats it cannot demux (e.g. MKV)', async () => {
+    it('does NOT include MP4Box for formats it cannot demux (e.g. MKV)', async () => {
       const engines = await resolveAvailableEngines('MKV', 'WEBM', '');
-      expect(engines.find(e => e.moduleId === 'webm-muxer')).toBeUndefined();
       expect(engines.find(e => e.moduleId === 'mp4box')).toBeUndefined();
     });
 
-    it('resolves dedicated engines for MP4 -> WEBM, MP4 -> MP4, and MP4 -> M4A', async () => {
+    it('resolves Mediabunny for WebCodecs accelerated conversions (MP4 -> WEBM, MKV -> MP4, MP4 -> MP4)', async () => {
       const webmEngines = await resolveAvailableEngines('MP4', 'WEBM', 'video/mp4');
-      expect(webmEngines.find(e => e.moduleId === 'webm-muxer')).toBeDefined();
+      expect(webmEngines.find(e => e.moduleId === 'mediabunny')).toBeDefined();
+
+      const mkvToMp4Engines = await resolveAvailableEngines('MKV', 'MP4');
+      expect(mkvToMp4Engines.find(e => e.moduleId === 'mediabunny')).toBeDefined();
+
+      const mp4Engines = await resolveAvailableEngines('MP4', 'MP4', 'video/mp4');
+      expect(mp4Engines.find(e => e.moduleId === 'mediabunny')).toBeDefined();
 
       const m4aEngines = await resolveAvailableEngines('MP4', 'M4A', 'video/mp4');
       expect(m4aEngines.find(e => e.moduleId === 'mp4box')).toBeDefined();
-
-      const mp4Engines = await resolveAvailableEngines('MP4', 'MP4', 'video/mp4');
-      expect(mp4Engines.find(e => e.moduleId === 'mp4-muxer')).toBeDefined();
+      expect(m4aEngines.find(e => e.moduleId === 'mediabunny')).toBeDefined();
     });
 
     it('returns empty array if no engine can perform the conversion', async () => {

@@ -5,8 +5,7 @@
  */
 export * from './remux';
 export * from './mp4box';
-export * from './mp4-muxer';
-export * from './webm-muxer';
+export * from './mediabunny';
 export * from './ffmpeg-mt';
 export * from './ffmpeg';
 export * from './magick';
