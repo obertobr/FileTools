@@ -1,4 +1,4 @@
-﻿/**
+/**
  * src/core/engine/WorkerManager.ts
  *
  * The main Orchestrator (Singleton).
@@ -17,7 +17,7 @@ import type { ExecutionContext } from '@/shared/types/module';
 import { getModuleById } from '@/modules/registry';
 
 /** Modules that spawn their own workers or use native window APIs */
-const MAIN_THREAD_MODULES = new Set(['ffmpeg-core', 'ffmpeg-core-mt', 'webcodecs-gpu', 'stream-copy']);
+const MAIN_THREAD_MODULES = new Set(['ffmpeg-core', 'ffmpeg-core-mt', 'stream-copy', 'mp4box', 'mp4-muxer', 'webm-muxer']);
 
 export class WorkerManager {
   private static instance: WorkerManager;

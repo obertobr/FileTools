@@ -10,7 +10,7 @@
 * **Isolamento de Threads:** Web Workers + `comlink` (Processamento pesado fora da main thread).
 * **File System:** API OPFS (Origin Private File System) para manipulação de arquivos com alta performance e sem estouro de RAM.
 * **PWA:** `vite-plugin-pwa` (Cache API e Service Worker offline-first).
-* **Motores de Conversão (MVP):** `@ffmpeg/ffmpeg` (Wasm), `@imagemagick/magick-wasm`, `pdf-lib`, `mammoth`, `xlsx` (SheetJS).
+* **Motores de Conversão (MVP):** `@ffmpeg/ffmpeg` (Wasm MT/ST), `@imagemagick/magick-wasm`, `mp4-muxer` (WebCodecs H.264), `webm-muxer` (WebCodecs VP9), `mp4box` (ISO-BMFF), `pdf-lib`, `mammoth`, `xlsx` (SheetJS).
 
 ---
 
@@ -149,7 +149,9 @@ A suíte de testes foca em regras de negócio críticas:
 │   │       ├── ffmpeg-mt.ts         # Motor FFmpeg Multi-Thread (pthreads)
 │   │       ├── ffmpeg.ts            # Motor FFmpeg Single-Thread
 │   │       ├── remux.ts             # Motor Stream Copy (Remux instantâneo)
-│   │       ├── webcodecs.ts         # Motor WebCodecs (GPU)
+│   │       ├── mp4-muxer.ts         # Motor MP4 Muxer (WebCodecs H.264 GPU)
+│   │       ├── webm-muxer.ts        # Motor WebM Muxer (WebCodecs VP9 GPU)
+│   │       ├── mp4box.ts            # Motor MP4Box (ISO-BMFF, extração direta)
 │   │       ├── magick.ts            # Motor ImageMagick WASM
 │   │       ├── pdf.ts               # Motor pdf-lib
 │   │       ├── mammoth.ts           # Motor mammoth.js (DOCX)
@@ -275,7 +277,7 @@ O sistema de opções avançadas (Pilha de Modificadores (Modifier Stack)) obede
    - O binário C/WASM lê blocos sob demanda diretamente do descritor de arquivo nativo do navegador sem duplicar o arquivo na RAM do WebAssembly.
    - Em blocos `finally`, o sistema realiza o desmontamento seguro (`ffmpeg.unmount('/work')`) e a limpeza imediata do diretório virtual.
 3. **Chunked Demuxing & Retorno em Blob**:
-   - Motores demuxers/muxers em JavaScript (como `webcodecs.ts`) realizam a leitura fatiada em blocos controlados (ex: fatias de 2MB diretamente via `ReadableStream` / `file.slice`), prevenindo estouro de heap do V8 ao processar arquivos de múltiplos gigabytes.
+   - Motores demuxers/muxers em JavaScript (como `mp4-muxer.ts`, `webm-muxer.ts` e `mp4box.ts`) realizam a leitura fatiada em blocos controlados (ex: fatias de 2MB diretamente via `ReadableStream` / `file.slice`), prevenindo estouro de heap do V8 ao processar arquivos de múltiplos gigabytes.
    - Os motores entregam a saída final como `outputBlob` ou gravam diretamente no OPFS, preservando a estabilidade da aba do navegador.
 
 ---

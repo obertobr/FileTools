@@ -250,7 +250,9 @@ import { MeuModule } from './engines/meu-modulo';
 //    A CHAVE deve ser EXATAMENTE o manifest.id do módulo
 export const ModuleRegistry: Record<string, IModule> = {
   'stream-copy': RemuxModule,
-  'webcodecs-gpu': WebCodecsModule,
+  'mp4box': MP4BoxModule,
+  'mp4-muxer': Mp4MuxerModule,
+  'webm-muxer': WebmMuxerModule,
   'ffmpeg-core-mt': FFmpegMTModule,
   'ffmpeg-core': FFmpegModule,
   'magick-wasm': MagickModule,
@@ -286,8 +288,10 @@ O módulo deve ser adicionado a esta lista **se e somente se** ele:
 const MAIN_THREAD_MODULES = new Set([
   'ffmpeg-core',
   'ffmpeg-core-mt',
-  'webcodecs-gpu',
   'stream-copy',
+  'mp4box',
+  'mp4-muxer',
+  'webm-muxer',
   'meu-motor-wasm',  // ← Adicionar SOMENTE se o módulo se enquadra nas regras acima
 ]);
 ```

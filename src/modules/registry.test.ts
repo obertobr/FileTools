@@ -110,7 +110,8 @@ describe('Module Registry', () => {
 
       const mp4ToAac = await resolveAvailableEngines('MP4', 'AAC');
       expect(mp4ToAac.length).toBeGreaterThanOrEqual(2);
-      expect(mp4ToAac[0].moduleId).toBe('ffmpeg-core-mt');
+      expect(mp4ToAac[0].moduleId).toBe('mp4box');
+      expect(mp4ToAac.find(e => e.moduleId === 'ffmpeg-core-mt')).toBeDefined();
     });
 
     it('resolves engines for new audio conversions (WAV -> OPUS, FLAC -> M4A)', async () => {
@@ -154,14 +155,76 @@ describe('Module Registry', () => {
       expect(jpgToWebm[0].moduleId).toBe('ffmpeg-core-mt');
     });
 
-    it('does NOT include WebCodecs for formats it cannot demux (e.g. MKV)', async () => {
+    it('does NOT include MP4Box or WebM Muxer for formats it cannot demux (e.g. MKV)', async () => {
       const engines = await resolveAvailableEngines('MKV', 'WEBM', '');
-      expect(engines.find(e => e.moduleId === 'webcodecs-gpu')).toBeUndefined();
+      expect(engines.find(e => e.moduleId === 'webm-muxer')).toBeUndefined();
+      expect(engines.find(e => e.moduleId === 'mp4box')).toBeUndefined();
+    });
+
+    it('resolves dedicated engines for MP4 -> WEBM, MP4 -> MP4, and MP4 -> M4A', async () => {
+      const webmEngines = await resolveAvailableEngines('MP4', 'WEBM', 'video/mp4');
+      expect(webmEngines.find(e => e.moduleId === 'webm-muxer')).toBeDefined();
+
+      const m4aEngines = await resolveAvailableEngines('MP4', 'M4A', 'video/mp4');
+      expect(m4aEngines.find(e => e.moduleId === 'mp4box')).toBeDefined();
+
+      const mp4Engines = await resolveAvailableEngines('MP4', 'MP4', 'video/mp4');
+      expect(mp4Engines.find(e => e.moduleId === 'mp4-muxer')).toBeDefined();
     });
 
     it('returns empty array if no engine can perform the conversion', async () => {
       const engines = await resolveAvailableEngines('DOCX', 'MP3');
       expect(engines).toHaveLength(0);
+    });
+
+    it('resolves PdfModule for image-to-pdf and pdf-to-pdf', async () => {
+      const jpgToPdf = await resolveAvailableEngines('JPG', 'PDF');
+      expect(jpgToPdf.find(e => e.moduleId === 'pdf-lib')).toBeDefined();
+
+      const pngToPdf = await resolveAvailableEngines('PNG', 'PDF');
+      expect(pngToPdf.find(e => e.moduleId === 'pdf-lib')).toBeDefined();
+
+      const pdfToPdf = await resolveAvailableEngines('PDF', 'PDF');
+      expect(pdfToPdf.find(e => e.moduleId === 'pdf-lib')).toBeDefined();
+    });
+
+    it('resolves MammothModule for DOCX -> HTML, TXT, and MD', async () => {
+      const docxToHtml = await resolveAvailableEngines('DOCX', 'HTML');
+      expect(docxToHtml.find(e => e.moduleId === 'mammoth')).toBeDefined();
+
+      const docxToTxt = await resolveAvailableEngines('DOCX', 'TXT');
+      expect(docxToTxt.find(e => e.moduleId === 'mammoth')).toBeDefined();
+
+      const docxToMd = await resolveAvailableEngines('DOCX', 'MD');
+      expect(docxToMd.find(e => e.moduleId === 'mammoth')).toBeDefined();
+    });
+
+    it('resolves SheetJSModule across spreadsheets (XLSX, XLS, ODS, CSV, TSV, JSON, HTML)', async () => {
+      const xlsxToCsv = await resolveAvailableEngines('XLSX', 'CSV');
+      expect(xlsxToCsv.find(e => e.moduleId === 'sheetjs')).toBeDefined();
+
+      const csvToXlsx = await resolveAvailableEngines('CSV', 'XLSX');
+      expect(csvToXlsx.find(e => e.moduleId === 'sheetjs')).toBeDefined();
+
+      const odsToXls = await resolveAvailableEngines('ODS', 'XLS');
+      expect(odsToXls.find(e => e.moduleId === 'sheetjs')).toBeDefined();
+
+      const jsonToCsv = await resolveAvailableEngines('JSON', 'CSV');
+      expect(jsonToCsv.find(e => e.moduleId === 'sheetjs')).toBeDefined();
+
+      const xlsxToHtml = await resolveAvailableEngines('XLSX', 'HTML');
+      expect(xlsxToHtml.find(e => e.moduleId === 'sheetjs')).toBeDefined();
+    });
+
+    it('resolves MagickModule for image conversions including PDF and WebP', async () => {
+      const pngToWebp = await resolveAvailableEngines('PNG', 'WEBP', 'image/png');
+      expect(pngToWebp.find(e => e.moduleId === 'magick-wasm')).toBeDefined();
+
+      const jpgToBmp = await resolveAvailableEngines('JPG', 'BMP', 'image/jpeg');
+      expect(jpgToBmp.find(e => e.moduleId === 'magick-wasm')).toBeDefined();
+
+      const pngToPdf = await resolveAvailableEngines('PNG', 'PDF', 'image/png');
+      expect(pngToPdf.find(e => e.moduleId === 'magick-wasm')).toBeDefined();
     });
   });
 });

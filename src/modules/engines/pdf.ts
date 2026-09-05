@@ -11,6 +11,7 @@ export const PdfModule: IModule = {
     supportedModifiers: [],
     supportedConversions: [
       { from: ['.jpg', '.jpeg', '.png'], to: ['.pdf'], lossy: false, speedScore: 90 },
+      { from: ['.pdf'], to: ['.pdf'], lossy: false, speedScore: 95 },
     ],
     inputs: [
       { id: 'file', name: 'Input File', type: 'file_handle', required: true }
@@ -28,31 +29,39 @@ export const PdfModule: IModule = {
       throw new Error('PDF module requires file (File/Blob) or fileData (Uint8Array) and originalName.');
     }
 
-    context.onLog(`[pdf-lib] Criando documento PDF a partir de ${originalName}`);
-    context.onProgress(20, 'Inicializando documento PDF...');
+    context.onLog(`[pdf-lib] Processando documento PDF a partir de ${originalName}`);
+    context.onProgress(20, 'Carregando arquivo...');
 
     const data = fileData || new Uint8Array(await (file as File | Blob).arrayBuffer());
-    const pdfDoc = await PDFDocument.create();
     const ext = originalName.slice(originalName.lastIndexOf('.')).toLowerCase();
 
-    context.onProgress(50, 'Embutindo imagem...');
-    let image;
-    if (ext === '.png') {
-      image = await pdfDoc.embedPng(data);
+    let pdfDoc: PDFDocument;
+
+    if (ext === '.pdf') {
+      context.onProgress(40, 'Carregando estrutura do PDF existente...');
+      pdfDoc = await PDFDocument.load(data, { ignoreEncryption: true });
     } else {
-      image = await pdfDoc.embedJpg(data);
+      context.onProgress(40, 'Inicializando novo documento PDF...');
+      pdfDoc = await PDFDocument.create();
+      context.onProgress(60, 'Embutindo imagem no PDF...');
+      let image;
+      if (ext === '.png') {
+        image = await pdfDoc.embedPng(data);
+      } else {
+        image = await pdfDoc.embedJpg(data);
+      }
+
+      const page = pdfDoc.addPage([image.width, image.height]);
+      page.drawImage(image, {
+        x: 0,
+        y: 0,
+        width: image.width,
+        height: image.height,
+      });
     }
 
-    const page = pdfDoc.addPage([image.width, image.height]);
-    page.drawImage(image, {
-      x: 0,
-      y: 0,
-      width: image.width,
-      height: image.height,
-    });
-
     context.onProgress(80, 'Salvando bytes do PDF...');
-    const pdfBytes = await pdfDoc.save();
+    const pdfBytes = await pdfDoc.save({ useObjectStreams: true });
     const outputData = new Uint8Array(pdfBytes);
     const outputFileName = originalName.replace(/\.[^.]+$/, '') + '.pdf';
     const outputBlob = new Blob([outputData.buffer as unknown as BlobPart], { type: 'application/pdf' });

@@ -60,12 +60,13 @@ export const MIME_TYPE_MAP: Record<string, string> = {
   '.rtf': 'application/rtf',
   '.odt': 'application/vnd.oasis.opendocument.text',
 
-  // Spreadsheets
+  // Spreadsheets & Data
   '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   '.xls': 'application/vnd.ms-excel',
   '.csv': 'text/csv',
   '.tsv': 'text/tab-separated-values',
   '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
+  '.json': 'application/json',
 
   // Fonts
   '.woff': 'font/woff',

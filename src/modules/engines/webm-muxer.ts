@@ -1,16 +1,14 @@
 /**
- * src/modules/engines/webcodecs.ts
+ * src/modules/engines/webm-muxer.ts
  *
- * Hardware-accelerated Video Transcoder using the native WebCodecs API
- * (VideoDecoder & VideoEncoder) with GPU-backed processing and zero-copy frames.
+ * Dedicated WebM container muxer and GPU-accelerated video encoder powered by
+ * the `webm-muxer` library and the native WebCodecs API (VP9).
  *
- * Strict device & codec verification: only offered if the client browser and GPU
- * explicitly support the requested encoder profile via `VideoEncoder.isConfigSupported`.
- *
- * Implements Zero-RAM streaming via chunked MP4Box appending and decoupled bitrate presets.
+ * Adheres to:
+ * - Pilar 1: Desacoplamento Canônico (Engines "Burras")
+ * - Pilar 2: Zero-RAM Streaming em Chunks de 2MB
  */
 import * as MP4Box from 'mp4box';
-import { Muxer as Mp4Muxer, ArrayBufferTarget as Mp4ArrayBufferTarget } from 'mp4-muxer';
 import { Muxer as WebmMuxer, ArrayBufferTarget as WebmArrayBufferTarget } from 'webm-muxer';
 import type { IModule, ExecutionContext } from '@/shared/types/module';
 import { getMimeType } from '@/core/knowledge/mimeTypes';
@@ -30,28 +28,27 @@ function getTrackDescription(track: MP4Box.MP4Track, mp4boxfile: any): Uint8Arra
       }
     }
   } catch (_e) {
-    // If description extraction fails, let VideoDecoder try without it
+    /* fallback to auto-detection */
   }
   return undefined;
 }
 
-export const WebCodecsModule: IModule = {
+export const WebmMuxerModule: IModule = {
   manifest: {
-    id: 'webcodecs-gpu',
-    name: 'WebCodecs GPU',
+    id: 'webm-muxer',
+    name: 'WebM Muxer (GPU)',
     version: '1.0.0',
-    description: 'Transcodificação de alta velocidade com aceleração por hardware na GPU (NVENC, QuickSync, Apple Silicon).',
+    description: 'Empacotamento e transcodificação de alta velocidade para contêiner WebM com aceleração por hardware (WebCodecs VP9).',
     category: 'video',
     supportedModifiers: ['quality', 'bitrate'],
     supportedConversions: [
       {
-        // MP4Box is specifically an ISO Base Media File Format parser (MP4 / M4V)
-        from: ['.mp4', '.m4v'],
-        to: ['.mp4', '.webm'],
+        from: ['.mp4', '.m4v', '.mov', '.3gp'],
+        to: ['.webm'],
         lossy: true,
         speedScore: 95,
         acceleration: 'gpu',
-        performanceNotes: 'Aceleração direta de hardware na GPU (10x-50x mais rápido)',
+        performanceNotes: 'Aceleração direta de hardware na GPU com codificador VP9 e webm-muxer',
       },
     ],
     inputs: [
@@ -62,22 +59,16 @@ export const WebCodecsModule: IModule = {
     ],
   },
 
-  /**
-   * Probes device GPU capabilities before showing WebCodecs as an option.
-   */
-  isSupported: async (context) => {
+  isSupported: async () => {
     if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.MODE === 'test') {
       return true;
     }
     if (typeof window === 'undefined') return true;
     if (!('VideoDecoder' in window) || !('VideoEncoder' in window)) return false;
 
-    const targetExt = context?.targetFormat?.toLowerCase();
-    const targetCodec = targetExt === '.webm' ? 'vp09.00.10.08' : 'avc1.42001f';
-
     try {
       const encoderSupport = await VideoEncoder.isConfigSupported({
-        codec: targetCodec,
+        codec: 'vp09.00.10.08',
         width: 1280,
         height: 720,
         bitrate: 2_500_000,
@@ -90,7 +81,7 @@ export const WebCodecsModule: IModule = {
     }
   },
 
-  execute: async (inputs, context) => {
+  execute: async (inputs, context: ExecutionContext) => {
     const file = inputs.file as File | Blob | undefined;
     const fileData = inputs.fileData as Uint8Array | undefined;
     const originalName = inputs.originalName as string;
@@ -98,18 +89,16 @@ export const WebCodecsModule: IModule = {
     const options = (inputs.modifiers as any) || (inputs.options as any) || undefined;
 
     if ((!file && !fileData) || !originalName || !targetFormat) {
-      throw new Error('WebCodecs module requires file (File/Blob) or fileData (Uint8Array), originalName, and targetFormat.');
+      throw new Error('WebM Muxer requer arquivo (File/Blob) ou fileData (Uint8Array), originalName e targetFormat.');
     }
 
     if (typeof window === 'undefined' || !('VideoDecoder' in window) || !('VideoEncoder' in window)) {
       throw new Error('WebCodecs API (VideoDecoder/VideoEncoder) não é suportada neste navegador.');
     }
 
-    const outputExt = targetFormat.startsWith('.') ? targetFormat.toLowerCase() : '.' + targetFormat.toLowerCase();
-    const outputFileName = originalName.replace(/\.[^.]+$/, '') + outputExt;
-
-    context.onLog(`[WebCodecs GPU] Iniciando aceleração por hardware para ${originalName} -> ${outputFileName}`);
-    context.onProgress(0, 'Inicializando decodificador GPU...');
+    const outputFileName = originalName.replace(/\.[^.]+$/, '') + '.webm';
+    context.onLog(`[WebM Muxer] Iniciando muxing GPU para ${originalName} -> ${outputFileName}`);
+    context.onProgress(0, 'Inicializando decodificador GPU e webm-muxer...');
 
     return new Promise((resolve, reject) => {
       let isSettled = false;
@@ -117,52 +106,42 @@ export const WebCodecsModule: IModule = {
       function fail(err: Error | string) {
         if (isSettled) return;
         isSettled = true;
-        const message = typeof err === 'string' ? err : err.message;
-        reject(new Error(message));
+        const msg = typeof err === 'string' ? err : err.message;
+        reject(new Error(msg));
       }
 
       try {
         const mp4boxfile = MP4Box.createFile();
-
         let videoTrack: MP4Box.MP4Track | null = null;
         let totalSamples = 0;
         let processedSamples = 0;
-        const isWebM = outputExt === '.webm';
 
-        // Setup Output Muxer
-        const mp4Target = !isWebM ? new Mp4ArrayBufferTarget() : null;
-        const webmTarget = isWebM ? new WebmArrayBufferTarget() : null;
-
-        let mp4Muxer: Mp4Muxer<Mp4ArrayBufferTarget> | null = null;
+        const webmTarget = new WebmArrayBufferTarget();
         let webmMuxer: WebmMuxer<WebmArrayBufferTarget> | null = null;
-
         let videoDecoder: VideoDecoder | null = null;
         let videoEncoder: VideoEncoder | null = null;
-
         let isCompleted = false;
 
         function checkFinished() {
           if (isCompleted && videoEncoder && videoEncoder.encodeQueueSize === 0) {
             try {
-              if (mp4Muxer) mp4Muxer.finalize();
               if (webmMuxer) webmMuxer.finalize();
-
-              const buffer = !isWebM ? mp4Target!.buffer : webmTarget!.buffer;
+              const buffer = webmTarget.buffer;
               const resultBytes = new Uint8Array(buffer);
 
               if (isSettled) return;
               isSettled = true;
 
-              context.onProgress(100, 'Transcodificação na GPU concluída!');
-              context.onLog(`[WebCodecs GPU] Sucesso: ${outputFileName} (${(resultBytes.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+              context.onProgress(100, 'Transcodificação WebM concluída com sucesso!');
+              context.onLog(`[WebM Muxer] Sucesso: ${outputFileName} (${(resultBytes.byteLength / 1024 / 1024).toFixed(2)} MB)`);
 
-              const mimeType = getMimeType(outputExt);
+              const mimeType = getMimeType('.webm');
               const outputBlob = new Blob([buffer], { type: mimeType });
 
               resolve({
                 outputData: resultBytes,
                 outputBlob,
-                outputFileName: outputFileName,
+                outputFileName,
                 outputSize: resultBytes.byteLength,
                 mimeType,
               });
@@ -174,18 +153,17 @@ export const WebCodecsModule: IModule = {
 
         mp4boxfile.onError = (module: string, msg: string) => {
           if (isCompleted || processedSamples > 0) {
-            context.onLog(`[WebCodecs GPU] Aviso residual de fim de arquivo ignorado: [${module}] ${msg}`);
+            context.onLog(`[WebM Muxer] Aviso residual ignorado: [${module}] ${msg}`);
             return;
           }
-          const detail = msg ? `[${module}] ${msg}` : String(module);
-          fail(`Contêiner MP4 incompatível com decodificador GPU: ${detail}`);
+          fail(`Erro na leitura do contêiner: [${module}] ${msg}`);
         };
 
         mp4boxfile.onReady = async (info: MP4Box.MP4Info) => {
           try {
             videoTrack = info.videoTracks[0];
             if (!videoTrack) {
-              fail('Nenhuma trilha de vídeo encontrada no arquivo para aceleração GPU.');
+              fail('Nenhuma trilha de vídeo encontrada no arquivo.');
               return;
             }
 
@@ -193,44 +171,26 @@ export const WebCodecsModule: IModule = {
             const width = videoTrack.track_width || 1280;
             const height = videoTrack.track_height || 720;
 
-            context.onLog(`[WebCodecs GPU] Trilha de vídeo: ${width}x${height}, codec: ${videoTrack.codec}, total: ${totalSamples} quadros`);
+            context.onLog(`[WebM Muxer] Trilha de vídeo: ${width}x${height}, codec: ${videoTrack.codec}, total: ${totalSamples} quadros`);
 
-            // 1. Initialize Muxer
-            if (isWebM) {
-              webmMuxer = new WebmMuxer({
-                target: webmTarget!,
-                video: {
-                  codec: 'V_VP9',
-                  width,
-                  height,
-                },
-              });
-            } else {
-              mp4Muxer = new Mp4Muxer({
-                target: mp4Target!,
-                video: {
-                  codec: 'avc',
-                  width,
-                  height,
-                },
-                fastStart: 'in-memory',
-              });
-            }
+            // Setup webm-muxer
+            webmMuxer = new WebmMuxer({
+              target: webmTarget,
+              video: {
+                codec: 'V_VP9',
+                width,
+                height,
+              },
+            });
 
-            // 2. Initialize Hardware Video Encoder
-            const targetCodec = isWebM ? 'vp09.00.10.08' : 'avc1.42001f';
-
+            // Setup Hardware VideoEncoder for VP9
             videoEncoder = new VideoEncoder({
               output: (chunk, metadata) => {
-                if (webmMuxer) {
-                  webmMuxer.addVideoChunk(chunk, metadata ?? undefined);
-                } else if (mp4Muxer) {
-                  mp4Muxer.addVideoChunk(chunk, metadata ?? undefined);
-                }
+                webmMuxer?.addVideoChunk(chunk, metadata ?? undefined);
                 checkFinished();
               },
               error: (e) => {
-                context.onLog(`[WebCodecs GPU] Erro no encoder de hardware: ${e.message}`);
+                context.onLog(`[WebM Muxer] Erro no codificador VP9: ${e.message}`);
                 fail(e);
               },
             });
@@ -238,7 +198,7 @@ export const WebCodecsModule: IModule = {
             const bitrate = resolveWebCodecsBitrate(options);
 
             videoEncoder.configure({
-              codec: targetCodec,
+              codec: 'vp09.00.10.08',
               width,
               height,
               bitrate,
@@ -246,7 +206,7 @@ export const WebCodecsModule: IModule = {
               hardwareAcceleration: 'prefer-hardware',
             });
 
-            // 3. Initialize Video Decoder
+            // Setup VideoDecoder
             videoDecoder = new VideoDecoder({
               output: (frame) => {
                 processedSamples++;
@@ -258,7 +218,7 @@ export const WebCodecsModule: IModule = {
                 frame.close();
               },
               error: (e) => {
-                context.onLog(`[WebCodecs GPU] Erro no decoder de hardware: ${e.message}`);
+                context.onLog(`[WebM Muxer] Erro no decodificador de vídeo: ${e.message}`);
                 fail(e);
               },
             });
@@ -272,7 +232,6 @@ export const WebCodecsModule: IModule = {
 
             videoDecoder.configure(decoderConfig);
 
-            // 4. Start Extracting Samples
             mp4boxfile.setExtractionOptions(videoTrack.id, null, { nbSamples: 10000 });
             mp4boxfile.start();
           } catch (err) {
@@ -306,7 +265,7 @@ export const WebCodecsModule: IModule = {
           }
         };
 
-        // Stream or chunk append
+        // Streaming in 2MB chunks (Pilar 2: Zero-RAM Streaming)
         (async () => {
           try {
             if (file) {
@@ -326,7 +285,6 @@ export const WebCodecsModule: IModule = {
                 fileData.byteOffset,
                 fileData.byteOffset + fileData.byteLength
               ) as ArrayBuffer;
-
               (rawBuffer as any).fileStart = 0;
               mp4boxfile.appendBuffer(rawBuffer, true);
               mp4boxfile.flush();

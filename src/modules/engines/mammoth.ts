@@ -7,11 +7,11 @@ export const MammothModule: IModule = {
     id: 'mammoth',
     name: 'Mammoth DOCX',
     version: '1.12.2',
-    description: 'Extrator e conversor local de arquivos DOCX para HTML e TXT.',
+    description: 'Extrator e conversor local de arquivos DOCX para HTML, TXT e Markdown (MD).',
     category: 'document',
     supportedModifiers: [],
     supportedConversions: [
-      { from: ['.docx'], to: ['.txt', '.html'], lossy: true, speedScore: 92 },
+      { from: ['.docx'], to: ['.html', '.txt', '.md'], lossy: true, speedScore: 92 },
     ],
     inputs: [
       { id: 'file', name: 'Input File', type: 'file_handle', required: true }
@@ -54,6 +54,12 @@ export const MammothModule: IModule = {
 
     if (targetExt === '.html') {
       const result = await mammoth.convertToHtml({ arrayBuffer });
+      outputText = result.value;
+    } else if (targetExt === '.md') {
+      const mammothWithMarkdown = mammoth as unknown as {
+        convertToMarkdown: (options: { arrayBuffer: ArrayBuffer }) => Promise<{ value: string; messages: unknown[] }>;
+      };
+      const result = await mammothWithMarkdown.convertToMarkdown({ arrayBuffer });
       outputText = result.value;
     } else {
       const result = await mammoth.extractRawText({ arrayBuffer });

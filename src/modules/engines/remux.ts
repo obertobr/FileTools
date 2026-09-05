@@ -46,12 +46,20 @@ export const RemuxModule: IModule = {
     supportedModifiers: ['audio_tracks', 'subtitles'],
     supportedConversions: [
       {
-        from: ['.mkv', '.mp4', '.mov', '.m4v'],
-        to: ['.mp4', '.mkv'],
+        from: ['.mkv', '.mp4', '.mov', '.m4v', '.ts'],
+        to: ['.mp4', '.mkv', '.mov', '.m4v', '.ts', '.m4a', '.aac'],
         lossy: false,
-        speedScore: 99,
+        speedScore: 98,
         acceleration: 'instant-copy',
-        performanceNotes: 'Cópia direta sem re-encoding (instantâneo, qualidade 100% original)',
+        performanceNotes: 'Cópia direta de pacotes de dados sem re-encoding (instantâneo, qualidade 100% original)',
+      },
+      {
+        from: ['.webm'],
+        to: ['.mkv', '.opus', '.ogg'],
+        lossy: false,
+        speedScore: 98,
+        acceleration: 'instant-copy',
+        performanceNotes: 'Cópia direta de pacotes WebM/Matroska sem re-encoding',
       },
     ],
     inputs: [
@@ -147,8 +155,11 @@ export const RemuxModule: IModule = {
         }
       }
 
-      // Stream copy command: -c copy -movflags +faststart
-      const args = ['-i', inputPath, ...streamMapArgs, '-c', 'copy', '-movflags', '+faststart', outputPath];
+      // Stream copy command: handles video containers and direct audio extraction
+      const isAudioOutput = ['.m4a', '.aac', '.opus', '.ogg', '.mp3'].includes(outputExt);
+      const copyFlags = isAudioOutput ? ['-vn', '-c:a', 'copy'] : ['-c', 'copy'];
+      const movFlags = ['.mp4', '.mov', '.m4v', '.m4a'].includes(outputExt) ? ['-movflags', '+faststart'] : [];
+      const args = ['-i', inputPath, ...streamMapArgs, ...copyFlags, ...movFlags, outputPath];
       context.onLog(`[Remux] Executando: ffmpeg ${args.join(' ')}`);
 
       const exitCode = await ffmpeg.exec(args);

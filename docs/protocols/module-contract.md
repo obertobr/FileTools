@@ -1,4 +1,4 @@
-﻿# Protocolo: Contrato de Módulos (`module-contract.md`)
+# Protocolo: Contrato de Módulos (`module-contract.md`)
 
 **Status:** Ativo / Normativo  
 **Localização do Código:** `src/shared/types/module.ts`, `src/modules/registry.ts`
@@ -108,7 +108,7 @@ resolveAvailableEngines(sourceExt: string, targetExt: string, mimeType?: string)
 
 1. **Casamento de Regras:** O `ModuleRegistry` verifica quais regras declaram suporte a `from → to`.
 2. **Sondagem de Hardware em Tempo Real:** Para cada motor compatível, invoca `await module.isSupported(...)`:
-   - Para `webcodecs-gpu`: Verifica se `VideoEncoder.isConfigSupported` confirma suporte acelerado por hardware para o codec destino (ex: VP9 ou H.264). Se a GPU do usuário não possuir o chip codificador, o motor é descartado silenciosamente.
+   - Para `mp4-muxer` e `webm-muxer`: Verifica se `VideoEncoder.isConfigSupported` confirma suporte acelerado por hardware para o codec destino (H.264 ou VP9). Se a GPU do usuário não possuir o chip codificador, o motor é descartado silenciosamente.
    - Para `ffmpeg-core-mt`: Verifica se o navegador possui `SharedArrayBuffer` e isolamento COOP/COEP (`crossOriginIsolated`). Se não possuir, o motor multi-thread é descartado.
 3. **Ordenação por Performance:** Os motores aprovados no teste de hardware são ordenados decrescentemente pelo `speedScore`.
 4. **Recomendação Padrão:** O primeiro motor da lista recebe `isRecommended = true`.
