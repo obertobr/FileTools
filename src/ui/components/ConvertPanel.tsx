@@ -1,5 +1,19 @@
 import { useState, useEffect, useMemo } from 'react';
-import { AlertCircle, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  AlertCircle,
+  Terminal,
+  ChevronDown,
+  ChevronUp,
+  ArrowRight,
+  RefreshCw,
+  X,
+  Film,
+  Music,
+  Image as ImageIcon,
+  FileText,
+  Archive,
+  File as FileIcon,
+} from 'lucide-react';
 import { UploadDropzone } from './UploadDropzone';
 import { FilePreview } from './FilePreview';
 import { SearchInput } from './SearchInput';
@@ -10,12 +24,21 @@ import { ConversionModifiersPanel } from './ConversionModifiersPanel';
 import { ConversionProgress } from './ConversionProgress';
 import { DownloadResult } from './DownloadResult';
 import { Button, Card, Typography } from '@/ui/components/core';
-import { FORMATS, describeFile, type Format } from '@/lib/formats';
+import { FORMATS, describeFile, formatBytes, type Format } from '@/lib/formats';
 import { resolvePossibleConversions, resolveAvailableEngines, type EngineOption } from '@/modules/registry';
 import { WorkerManager } from '@/core/engine/WorkerManager';
 import { type ConversionModifiers, DEFAULT_CONVERSION_MODIFIERS } from '@/shared/types/conversionModifiers';
 import { probeMediaData, probeWithBrowser, type MediaProbeResult } from '@/core/media/mediaProbe';
 import { checkEngineCompatibility } from '@/modules/engineCapabilities';
+
+const categoryIcons: Record<string, typeof FileIcon> = {
+  video: Film,
+  audio: Music,
+  image: ImageIcon,
+  document: FileText,
+  archive: Archive,
+  other: FileIcon,
+};
 
 type Status = 'idle' | 'converting' | 'done' | 'error';
 
@@ -32,6 +55,7 @@ export function ConvertPanel({
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
   const [selected, setSelected] = useState<string | null>(fixedTarget ?? null);
+  const [isChangingFormat, setIsChangingFormat] = useState(false);
   const [availableEngines, setAvailableEngines] = useState<EngineOption[]>([]);
   const [selectedEngineId, setSelectedEngineId] = useState<string | null>(null);
   const [conversionModifiers, setConversionModifiers] = useState<ConversionModifiers>(DEFAULT_CONVERSION_MODIFIERS);
@@ -46,7 +70,7 @@ export function ConvertPanel({
   const [outputUrl, setOutputUrl] = useState<string | null>(null);
   const [outputSize, setOutputSize] = useState<number>(0);
 
-  const target = fixedTarget ?? selected;
+  const target = selected ?? fixedTarget;
   const sourceExt = file ? describeFile(file.name).ext : null;
 
   // Resolve possible conversions dynamically from the module registry
@@ -185,6 +209,7 @@ export function ConvertPanel({
     setOutputUrl(null);
     setOutputSize(0);
     if (!fixedTarget) setSelected(null);
+    setIsChangingFormat(false);
   }
 
   async function start(overrideEngineId?: string) {
@@ -218,13 +243,16 @@ export function ConvertPanel({
       
       const result = await manager.convert(
         engineToUse.moduleId,
-        { 
-          file: file,
+        {
+          file,
           targetFormat: '.' + target.replace(/^\.+/, '').toLowerCase(),
           originalName: file.name,
           options: conversionModifiers,
           modifiers: conversionModifiers,
-          userMaxThreads: conversionModifiers.threadsMode === 'custom' ? (conversionModifiers.customThreads ?? conversionModifiers.userMaxThreads) : undefined,
+          userMaxThreads:
+            conversionModifiers.threadsMode === 'custom'
+              ? (conversionModifiers.customThreads ?? conversionModifiers.userMaxThreads)
+              : undefined,
         },
         (p, msg) => {
           setProgress(p);
@@ -274,6 +302,7 @@ export function ConvertPanel({
         onFile={(f) => {
           setFile(f);
           setSelectedEngineId(null);
+          setIsChangingFormat(false);
         }}
         accept={accept}
         hint={hint ?? 'Suporta dezenas de formatos populares'}
@@ -281,29 +310,146 @@ export function ConvertPanel({
     );
   }
 
+  const sourceInfo = file ? describeFile(file.name) : null;
+  const targetInfo = target ? describeFile(outputName || `output.${target.toLowerCase().replace(/^\./, '')}`) : null;
+  const SourceIcon = sourceInfo ? categoryIcons[sourceInfo.category] || FileIcon : FileIcon;
+  const TargetIcon = targetInfo ? categoryIcons[targetInfo.category] || FileIcon : FileIcon;
+  const isFormatSelectionOpen = status === 'idle' && (!target || isChangingFormat);
+
   return (
     <div className="space-y-5">
-      <FilePreview file={file} onRemove={reset} />
+      {/* 1. Modo de Seleção / Busca de Formato */}
+      {isFormatSelectionOpen && (
+        <>
+          <FilePreview file={file} onRemove={reset} />
 
-      {status === 'idle' && !fixedTarget && (
-        <section className="space-y-3">
-          <Typography variant="h2" as="h2">
-            Converter para
-          </Typography>
-          <SearchInput value={query} onChange={setQuery} placeholder="Buscar formato..." />
-          <CategoryFilter value={category} onChange={setCategory} />
-          <FormatSelector
-            formats={availableFormats}
-            selected={selected}
-            onSelect={(ext) => {
-              setSelected(ext);
-              setSelectedEngineId(null);
-            }}
-          />
-        </section>
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Typography variant="h2" as="h2">
+                {target ? 'Trocar formato de conversão' : 'Converter para'}
+              </Typography>
+              {target && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsChangingFormat(false)}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Cancelar
+                </Button>
+              )}
+            </div>
+            <SearchInput value={query} onChange={setQuery} placeholder="Buscar formato..." />
+            <CategoryFilter value={category} onChange={setCategory} />
+            <FormatSelector
+              formats={availableFormats}
+              selected={selected}
+              onSelect={(ext) => {
+                setSelected(ext);
+                setIsChangingFormat(false);
+                setSelectedEngineId(null);
+              }}
+            />
+          </section>
+        </>
       )}
 
-      {status === 'idle' && target && availableEngines.length > 0 && (
+      {/* 2. Formato Selecionado: Oculta busca e exibe par de cards emparelhados (Original ➔ Destino) */}
+      {target && !isChangingFormat && (
+        <div className="rounded-xl border border-border/70 bg-surface/50 p-3 sm:p-4 shadow-sm backdrop-blur-xs space-y-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            {/* Card Arquivo Original */}
+            <div className="flex-1 flex items-center gap-3 rounded-lg border border-border/80 bg-surface px-3.5 py-3 transition-colors shadow-xs">
+              <span className="grid size-10 shrink-0 place-items-center rounded-md border border-border bg-surface-raised text-primary">
+                <SourceIcon className="size-5" strokeWidth={1.75} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-1.5 py-0.5 rounded bg-surface-raised border border-border/50 shrink-0">
+                    Original
+                  </span>
+                  <span className="text-xs text-muted-foreground font-mono shrink-0">
+                    {formatBytes(file.size)}
+                  </span>
+                </div>
+                <Typography variant="body" className="truncate font-semibold text-foreground mt-1" title={file.name}>
+                  {file.name}
+                </Typography>
+              </div>
+              {status === 'idle' && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={reset}
+                  aria-label="Remover ou trocar arquivo"
+                  title="Trocar arquivo"
+                  className="shrink-0 text-muted-foreground hover:text-destructive"
+                >
+                  <X className="size-4" strokeWidth={1.75} />
+                </Button>
+              )}
+            </div>
+
+            {/* Seta Central de Fluxo */}
+            <div className="flex shrink-0 items-center justify-center py-1 sm:py-0 text-muted-foreground">
+              <div className="grid size-8 place-items-center rounded-full bg-surface-raised border border-border shadow-xs text-primary/80">
+                <ArrowRight className="size-4" strokeWidth={2} />
+              </div>
+            </div>
+
+            {/* Card Arquivo Destino (Clicável para trocar) */}
+            <div
+              role={status === 'idle' ? 'button' : undefined}
+              tabIndex={status === 'idle' ? 0 : undefined}
+              onClick={status === 'idle' ? () => setIsChangingFormat(true) : undefined}
+              onKeyDown={
+                status === 'idle'
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setIsChangingFormat(true);
+                      }
+                    }
+                  : undefined
+              }
+              className={`flex-1 flex items-center gap-3 rounded-lg border px-3.5 py-3 text-left transition-all duration-150 relative overflow-hidden shadow-xs ${
+                status === 'idle'
+                  ? 'border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 cursor-pointer group focus:outline-hidden focus-visible:ring-2 focus-visible:ring-primary'
+                  : 'border-border/80 bg-surface'
+              }`}
+              title={status === 'idle' ? 'Clique no card para escolher outro formato de destino' : undefined}
+            >
+              <span className="grid size-10 shrink-0 place-items-center rounded-md border border-primary/20 bg-primary/10 text-primary group-hover:scale-105 transition-transform">
+                <TargetIcon className="size-5" strokeWidth={1.75} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-primary px-1.5 py-0.5 rounded bg-primary/15 border border-primary/20 shrink-0">
+                      Destino
+                    </span>
+                    <span className="text-xs font-semibold text-primary shrink-0">
+                      {target.replace(/^\./, '').toUpperCase()}
+                    </span>
+                  </div>
+                  {status === 'idle' && (
+                    <div className="shrink-0 flex items-center gap-1 text-[11px] text-muted-foreground group-hover:text-primary transition-colors">
+                      <span className="hidden sm:inline font-medium">Trocar</span>
+                      <RefreshCw className="size-3 group-hover:rotate-180 transition-transform duration-300" />
+                    </div>
+                  )}
+                </div>
+                <Typography variant="body" className="truncate font-semibold text-foreground mt-1" title={outputName}>
+                  {outputName}
+                </Typography>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Seletores de Motor e Modificadores */}
+      {status === 'idle' && target && !isChangingFormat && availableEngines.length > 0 && (
         <>
           <EngineSelector
             engines={availableEngines}
@@ -325,7 +471,8 @@ export function ConvertPanel({
         </>
       )}
 
-      {status === 'idle' && (
+      {/* 4. Botão de Conversão Principal */}
+      {status === 'idle' && target && !isChangingFormat && (
         <div className="space-y-2">
           <Button
             variant="primary"
