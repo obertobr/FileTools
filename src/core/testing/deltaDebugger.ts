@@ -103,6 +103,9 @@ export function getApplicableModifierPool(
     'bit_depth',
     'bitrate',
     'color_space',
+    'page_range',
+    'pdf_compliance',
+    'image_dpi',
   ];
 
   const pool: ModifierPatch[] = [];
@@ -246,6 +249,33 @@ export function getApplicableModifierPool(
     });
   }
 
+  // 15. Page Range (Documents and PDFs)
+  if (isSupported('page_range')) {
+    pool.push({
+      id: 'page_range',
+      description: 'Intervalo de páginas (página 1)',
+      patch: { pageRange: '1', isCustomPageRange: false },
+    });
+  }
+
+  // 16. PDF Compliance (PDF/A)
+  if (to === 'pdf' && isSupported('pdf_compliance')) {
+    pool.push({
+      id: 'pdf_compliance',
+      description: 'Conformidade arquivística PDF/A-2b',
+      patch: { pdfCompliance: 'pdfa-2b' },
+    });
+  }
+
+  // 17. Image DPI (Density)
+  if (isSupported('image_dpi')) {
+    pool.push({
+      id: 'image_dpi',
+      description: 'Densidade de renderização 300 DPI',
+      patch: { imageDpi: 300 },
+    });
+  }
+
   return pool;
 }
 
@@ -272,8 +302,72 @@ export async function runDeltaDebugging(
   const startTime = Date.now();
   let iterations = 0;
 
-  // 1. Stage 1: Baseline Sanity Test (C = empty, 0 modifiers)
-  // Essential check: verify that the user's default conversion without any active modifiers works smoothly.
+  // 1. Stage 1: Maximal Modifiers Stress Test (C_max) - Priority Error Detection
+  iterations++;
+  const maximalModifiers = combineModifierPatches(pool);
+  const maxRes = await executeConversion(
+    maximalModifiers,
+    `Etapa 1/2: Estresse Máximo (Aplicando pilha de ${pool.length} modificadores)`
+  );
+
+  if (maxRes.success) {
+    if (pool.length === 0) {
+      return {
+        from: fromExt,
+        to: toExt,
+        engineId,
+        status: 'PASS',
+        iterations,
+        maximalPassed: true,
+        baselinePassed: true,
+        durationMs: Date.now() - startTime,
+      };
+    }
+
+    // Verify baseline clean conversion
+    iterations++;
+    const baselineModifiers: ConversionModifiers = {
+      activeCategories: [],
+      selectedAudioTracks: [],
+      selectedSubtitleTracks: [],
+      keepAllSubtitles: true,
+    };
+    const baseRes = await executeConversion(
+      baselineModifiers,
+      'Etapa 2/2: Baseline (Conversão padrão limpa sem modificadores)'
+    );
+
+    if (baseRes.success) {
+      return {
+        from: fromExt,
+        to: toExt,
+        engineId,
+        status: 'PASS',
+        iterations,
+        maximalPassed: true,
+        baselinePassed: true,
+        durationMs: Date.now() - startTime,
+      };
+    }
+
+    return {
+      from: fromExt,
+      to: toExt,
+      engineId,
+      status: 'FAIL_BASELINE',
+      iterations,
+      maximalPassed: true,
+      baselinePassed: false,
+      error: baseRes.error || 'Falha na conversão padrão (Baseline sem modificadores).',
+      logs: baseRes.logs,
+      durationMs: Date.now() - startTime,
+    };
+  }
+
+  // 2. Stage 2: If Maximal Modifiers failed, test Baseline to differentiate engine failure vs modifier bug
+  const initialError = maxRes.error;
+  const initialLogs = maxRes.logs;
+
   iterations++;
   const baselineModifiers: ConversionModifiers = {
     activeCategories: [],
@@ -281,7 +375,10 @@ export async function runDeltaDebugging(
     selectedSubtitleTracks: [],
     keepAllSubtitles: true,
   };
-  const baseRes = await executeConversion(baselineModifiers, 'Etapa 1/2: Baseline (Conversão padrão limpa sem modificadores)');
+  const baseRes = await executeConversion(
+    baselineModifiers,
+    'Etapa 2: Diagnóstico Baseline (Verificando conversão limpa após falha de estresse)'
+  );
 
   if (!baseRes.success) {
     return {
@@ -292,32 +389,11 @@ export async function runDeltaDebugging(
       iterations,
       maximalPassed: false,
       baselinePassed: false,
-      error: baseRes.error || 'Falha na conversão padrão (Baseline sem modificadores).',
-      logs: baseRes.logs,
+      error: baseRes.error || initialError || 'Falha na conversão padrão (Baseline sem modificadores).',
+      logs: baseRes.logs || initialLogs,
       durationMs: Date.now() - startTime,
     };
   }
-
-  // 2. Stage 2: Maximal Modifiers Stress Test (C_max)
-  iterations++;
-  const maximalModifiers = combineModifierPatches(pool);
-  const maxRes = await executeConversion(maximalModifiers, `Etapa 2/2: Estresse Máximo (Aplicando pilha de ${pool.length} modificadores)`);
-
-  if (maxRes.success) {
-    return {
-      from: fromExt,
-      to: toExt,
-      engineId,
-      status: 'PASS',
-      iterations,
-      maximalPassed: true,
-      baselinePassed: true,
-      durationMs: Date.now() - startTime,
-    };
-  }
-
-  const initialError = maxRes.error;
-  const initialLogs = maxRes.logs;
 
   // 3. Stage 3: Singleton 1-Minimal Checks
   for (const mod of pool) {

@@ -65,17 +65,29 @@ export const FORMATS: Format[] = [
   { ext: 'TIFF', label: 'Tagged Image File Format', category: 'image' },
   { ext: 'HEIC', label: 'High Efficiency Image Container', category: 'image' },
   { ext: 'AVIF', label: 'AV1 Image File Format', category: 'image' },
+  { ext: 'SVG', label: 'Scalable Vector Graphics', category: 'image' },
+  { ext: 'BMP', label: 'Bitmap Image File', category: 'image' },
+  { ext: 'ICO', label: 'Windows Icon File', category: 'image' },
 
   // Document
   { ext: 'PDF', label: 'Portable Document Format', category: 'document' },
   { ext: 'DOCX', label: 'Microsoft Word OpenXML Document', category: 'document' },
+  { ext: 'DOC', label: 'Microsoft Word 97-2003 Document', category: 'document' },
+  { ext: 'ODT', label: 'OpenDocument Text Document', category: 'document' },
+  { ext: 'RTF', label: 'Rich Text Format Document', category: 'document' },
   { ext: 'XLSX', label: 'Microsoft Excel OpenXML Spreadsheet', category: 'document' },
   { ext: 'XLS', label: 'Microsoft Excel Binary Spreadsheet (97-2003)', category: 'document' },
   { ext: 'ODS', label: 'OpenDocument Spreadsheet', category: 'document' },
   { ext: 'CSV', label: 'Comma-Separated Values', category: 'document' },
+  { ext: 'PPTX', label: 'Microsoft PowerPoint OpenXML Presentation', category: 'document' },
+  { ext: 'PPT', label: 'Microsoft PowerPoint 97-2003 Presentation', category: 'document' },
+  { ext: 'ODP', label: 'OpenDocument Presentation', category: 'document' },
+  { ext: 'ODG', label: 'OpenDocument Drawing', category: 'document' },
+  { ext: 'EPUB', label: 'Electronic Publication E-book', category: 'document' },
   { ext: 'JSON', label: 'JavaScript Object Notation', category: 'other' },
   { ext: 'TXT', label: 'Plain Text', category: 'document' },
   { ext: 'HTML', label: 'HyperText Markup Language', category: 'document' },
+  { ext: 'MD', label: 'Markdown Document', category: 'document' },
 ];
 
 export function formatBytes(bytes: number): string {
@@ -90,9 +102,9 @@ export function categoryOfExtension(ext: string): Category {
   const e = ext.toLowerCase().replace(/^\./, '');
   if (['mp4', 'mov', 'mkv', 'avi', 'webm', 'm4v', 'flv', 'wmv', '3gp', 'ts', 'mts', 'm2ts', 'mpg', 'mpeg', 'vob', 'ogv', 'rm', 'asf'].includes(e)) return 'video';
   if (['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'opus', 'wma', 'aiff', 'aif', 'ac3', 'm4r', 'caf', 'voc', 'wv'].includes(e)) return 'audio';
-  if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'avif', 'bmp', 'tiff', 'heic'].includes(e))
+  if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'avif', 'bmp', 'tiff', 'heic', 'ico'].includes(e))
     return 'image';
-  if (['pdf', 'docx', 'doc', 'txt', 'md', 'rtf', 'html', 'xlsx', 'ods'].includes(e))
+  if (['pdf', 'docx', 'doc', 'txt', 'md', 'rtf', 'html', 'xlsx', 'xls', 'ods', 'csv', 'ppt', 'pptx', 'odp', 'odg', 'epub'].includes(e))
     return 'document';
   if (['zip', 'tar', 'gz', 'rar', '7z'].includes(e)) return 'archive';
   return 'other';

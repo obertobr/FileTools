@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Volume2,
   Layers,
@@ -14,6 +13,9 @@ import {
   Binary,
   Activity,
   Compass,
+  BookOpen,
+  ShieldCheck,
+  Printer,
 } from 'lucide-react';
 import type {
   ModifierCategoryId,
@@ -244,5 +246,29 @@ export const MODIFIER_DEFINITIONS: ModifierDefinition[] = [
     icon: Cpu,
     pinned: false,
     isApplicable: (ctx) => ctx.targetCategory === 'video' || ctx.targetCategory === 'audio',
+  },
+  {
+    id: 'page_range',
+    title: 'Intervalo de Páginas',
+    description: 'Selecione páginas específicas, intervalo ou a primeira página (capa).',
+    icon: BookOpen,
+    pinned: (ctx) => ctx.targetCategory === 'document' || ctx.sourceCategory === 'document',
+    isApplicable: (ctx) => ctx.targetCategory === 'document' || ctx.sourceCategory === 'document',
+  },
+  {
+    id: 'pdf_compliance',
+    title: 'Padrão PDF / PDF/A',
+    description: 'Conformidade com o padrão ISO PDF/A para arquivamento oficial e legal a longo prazo.',
+    icon: ShieldCheck,
+    pinned: (ctx) => ctx.targetExt === 'pdf',
+    isApplicable: (ctx) => ctx.targetExt === 'pdf',
+  },
+  {
+    id: 'image_dpi',
+    title: 'Resolução DPI (Densidade)',
+    description: 'Defina a resolução de rasterização da imagem em pontos por polegada (72 a 600 DPI).',
+    icon: Printer,
+    pinned: (ctx) => ctx.sourceCategory === 'document' && ctx.targetCategory === 'image',
+    isApplicable: (ctx) => ctx.targetCategory === 'image',
   },
 ];

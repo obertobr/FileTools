@@ -333,21 +333,29 @@ Se **qualquer** etapa falhar, o código NÃO deve ser merged/deployed.
 
 ---
 
-## Adicionando Cobertura para Novos Componentes
+## Adicionando Cobertura para Novos Componentes (Mandato de Testes Dinâmicos)
 
-### Quando adicionar um novo módulo:
+> [!IMPORTANT]
+> **PROIBIÇÃO DE TESTES GENÉRICOS / MOCKS ARTIFICIAIS:**
+> É expressamente proibido criar testes genéricos ou mocks "falsos". O FileTools valida conversores exclusivamente com arquivos reais e com o test runner dinâmico oficial (`scripts/test-conversion.ts` + `deltaDebugger.ts`).
+
+### Quando adicionar um novo motor (`IModule`):
 1. ✅ Teste de resolução no `registry.test.ts`
-2. ✅ Fixture de arquivo real em `tests/fixtures/`
-3. ✅ Script de teste em `test:modules` (se conversão complexa)
-4. ✅ Teste E2E em `e2e/modules/<nome>.spec.ts`
+2. ✅ Fixture de arquivo real em `tests/fixtures/sample.<ext>`
+3. ✅ **Execução Obrigatória do Runner Dinâmico**: `npx tsx scripts/test-conversion.ts --engine=<id_do_motor>` (o runner deve descobrir automaticamente todas as conversões declaradas no manifesto e passar 100% sob Baseline e Estresse Máximo)
+4. ✅ Teste E2E no Playwright em `e2e/modules/<nome>.spec.ts`
 
-### Quando adicionar uma nova opção:
-1. ✅ Teste E2E de renderização e interação em `e2e/test-modifiers.spec.ts`
-2. ✅ Verificar que a opção é consumida corretamente via teste de módulo
+### Quando adicionar um novo modificador (`ModifierCategoryId`):
+1. ✅ Registrar definição em `src/shared/types/conversionModifiers.ts` e `ModifierDefinitions.ts`
+2. ✅ **Registrar Patch de Estresse no Pool do DDmin**: atualizar `getApplicableModifierPool` em `src/core/testing/deltaDebugger.ts`
+3. ✅ **Adicionar Asserção Pós-Conversão no Runner**: atualizar `scripts/test-conversion.ts` com verificação real de saída (dimensões, FPS, páginas, cabeçalhos binários, etc.)
+4. ✅ **Verificar Cobertura do Teste Dinâmico**: executar o runner dinâmico para comprovar que todos os motores compatíveis com o novo modificador executam e passam
+5. ✅ Teste E2E de renderização e interação visual em `e2e/test-new-modifiers-ui.spec.ts`
 
-### Quando adicionar um novo formato:
-1. ✅ Teste de resolução no `registry.test.ts`
-2. ✅ Verificar build SSG (`npm run build`)
+### Quando adicionar um novo tipo de arquivo / formato:
+1. ✅ Registrar extensão e categoria em `src/lib/formats.ts`
+2. ✅ Adicionar arquivo de amostra real em `tests/fixtures/sample.<ext>`
+3. ✅ **Executar Teste Dinâmico**: rodar `npx tsx scripts/test-conversion.ts --from=<ext>` e `npx tsx scripts/test-conversion.ts --to=<ext>` para garantir que o runner dinâmico consiga carregar e converter o formato
 
 ---
 

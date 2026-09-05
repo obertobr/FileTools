@@ -38,6 +38,9 @@ export const MODIFIER_LABELS: Record<ModifierCategoryId, string> = {
   bit_depth: 'Profundidade de Cor',
   bitrate: 'Taxa de Bits (Bitrate)',
   color_space: 'Espaço de Cor',
+  page_range: 'Intervalo de Páginas',
+  pdf_compliance: 'Padrão PDF / Conformidade PDF/A',
+  image_dpi: 'Resolução de Renderização (DPI)',
 };
 
 /**

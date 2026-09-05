@@ -36,6 +36,9 @@ import { PixelFormatCard } from './modifiers/PixelFormatCard';
 import { BitDepthCard } from './modifiers/BitDepthCard';
 import { BitrateCard } from './modifiers/BitrateCard';
 import { ColorSpaceCard } from './modifiers/ColorSpaceCard';
+import { PageRangeCard } from './modifiers/PageRangeCard';
+import { PdfComplianceCard } from './modifiers/PdfComplianceCard';
+import { ImageDpiCard } from './modifiers/ImageDpiCard';
 import { categoryOfExtension } from '@/lib/formats';
 import { AddModifierPicker } from './modifiers/AddModifierPicker';
 import {
@@ -560,6 +563,33 @@ export function ConversionModifiersPanel({
                       options={currentModifiers}
                       onChange={update}
                       allowedOptions={derived?.allowedOptions}
+                      warningMessage={derived?.warningMessage}
+                    />
+                  )}
+
+                  {/* MODIFICADOR: INTERVALO DE PÁGINAS */}
+                  {modId === 'page_range' && (
+                    <PageRangeCard
+                      options={currentModifiers}
+                      onChange={update}
+                      warningMessage={derived?.warningMessage}
+                    />
+                  )}
+
+                  {/* MODIFICADOR: PADRÃO PDF / CONFORMIDADE PDF/A */}
+                  {modId === 'pdf_compliance' && (
+                    <PdfComplianceCard
+                      options={currentModifiers}
+                      onChange={update}
+                      warningMessage={derived?.warningMessage}
+                    />
+                  )}
+
+                  {/* MODIFICADOR: DENSIDADE DE RENDERIZAÇÃO (DPI) */}
+                  {modId === 'image_dpi' && (
+                    <ImageDpiCard
+                      options={currentModifiers}
+                      onChange={update}
                       warningMessage={derived?.warningMessage}
                     />
                   )}

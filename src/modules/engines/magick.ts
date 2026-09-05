@@ -12,6 +12,8 @@ import {
   ImageMagick,
   initializeImageMagick,
   MagickFormat,
+  Density,
+  DensityUnit,
 } from '@imagemagick/magick-wasm';
 import type { IModule, ExecutionContext } from '@/shared/types/module';
 import { getMimeType } from '@/core/knowledge/mimeTypes';
@@ -66,7 +68,7 @@ export const MagickModule: IModule = {
     version: '0.0.43',
     description: 'Conversor universal de imagens de alta fidelidade via ImageMagick WebAssembly.',
     category: 'image',
-    supportedModifiers: ['quality', 'resolution'],
+    supportedModifiers: ['quality', 'resolution', 'image_dpi'],
     supportedConversions: [
       {
         from: ['.png', '.jpg', '.jpeg', '.webp', '.tiff', '.tif', '.bmp', '.gif', '.heic', '.avif', '.ico'],
@@ -116,6 +118,13 @@ export const MagickModule: IModule = {
       try {
         ImageMagick.read(inputBytes, (image) => {
           try {
+            // Apply DPI / Density if specified
+            if (options?.imageDpi && Number(options.imageDpi) > 0) {
+              const dpi = Number(options.imageDpi);
+              image.density = new Density(dpi, DensityUnit.PixelsPerInch);
+              context.onLog(`[ImageMagick] Densidade configurada para ${dpi} DPI.`);
+            }
+
             // Apply quality if specified
             if (options?.qualityPreset) {
               const q = options.qualityPreset;

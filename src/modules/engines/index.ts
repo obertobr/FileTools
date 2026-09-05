@@ -12,3 +12,4 @@ export * from './magick';
 export * from './pdf';
 export * from './mammoth';
 export * from './sheetjs';
+export * from './libreoffice';

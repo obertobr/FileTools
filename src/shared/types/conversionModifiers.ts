@@ -23,7 +23,10 @@ export type ModifierCategoryId =
   | 'pixel_format'
   | 'bit_depth'
   | 'bitrate'
-  | 'color_space';
+  | 'color_space'
+  | 'page_range'
+  | 'pdf_compliance'
+  | 'image_dpi';
 
 export type QualityPreset = 'original' | 'balanced' | 'compressed' | 'custom';
 
@@ -80,6 +83,10 @@ export type ColorSpaceChoice =
   | 'smpte170m'
   | 'bt470bg'
   | 'srgb';
+
+export type PdfComplianceChoice = 'default' | 'pdfa-1b' | 'pdfa-2b' | 'pdfa-3b';
+
+export type ImageDpiChoice = 72 | 150 | 300 | 600;
 
 export interface ConversionModifiers {
   // Stack of active modifier categories
@@ -147,6 +154,15 @@ export interface ConversionModifiers {
   videoDurationSeconds?: number;
   isCustomDuration?: boolean;
 
+  // Document Modifiers (Page Range, PDF Compliance, Image DPI, PDF Quality)
+  pageRange?: string;
+  isCustomPageRange?: boolean;
+  pdfCompliance?: PdfComplianceChoice;
+  imageDpi?: ImageDpiChoice;
+  customImageDpi?: number;
+  isCustomImageDpi?: boolean;
+  pdfQuality?: number;
+
   // Probed media streams (real file metadata - NEVER mocked)
   probedMedia?: MediaProbeResult;
 }
@@ -172,6 +188,10 @@ export const DEFAULT_CONVERSION_MODIFIERS: ConversionModifiers = {
   videoDurationSeconds: 10,
   gifFps: 12,
   gifScaleWidth: 480,
+  pageRange: 'all',
+  pdfCompliance: 'default',
+  imageDpi: 150,
+  pdfQuality: 90,
 };
 
 export interface ModifierContext {

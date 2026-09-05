@@ -141,13 +141,13 @@ async function main() {
       const convLib = await import('/src/lib/converters.ts');
       const manifests = reg.getAllManifests();
 
-      let candidateConversions: { from: string; to: string }[] = [];
+      let candidateConversions: { from: string; to: string; engineId?: string }[] = [];
 
       // If a specific engine was targeted, discover ALL conversions that this engine declares in supportedConversions!
       if (engineFilter) {
         const targetManifest = manifests.find((m) => m.id === engineFilter);
         if (targetManifest && targetManifest.supportedConversions) {
-          const pairs: { from: string; to: string }[] = [];
+          const pairs: { from: string; to: string; engineId: string }[] = [];
           for (const rule of targetManifest.supportedConversions) {
             for (const f of rule.from) {
               for (const t of rule.to) {
@@ -155,8 +155,8 @@ async function main() {
                 const cTo = t.toLowerCase().replace(/^\./, '');
                 const matchFrom = !fromFilter || cFrom === fromFilter;
                 const matchTo = !toFilter || cTo === toFilter;
-                if (matchFrom && matchTo && cFrom !== cTo) {
-                  pairs.push({ from: cFrom, to: cTo });
+                if (matchFrom && matchTo && (cFrom !== cTo || Boolean(fromFilter && toFilter))) {
+                  pairs.push({ from: cFrom, to: cTo, engineId: engineFilter });
                 }
               }
             }
@@ -173,12 +173,21 @@ async function main() {
 
       // Fallback to global converter catalog
       if (candidateConversions.length === 0) {
-        const filtered = allConvs.filter((c) => {
+        const allConvs = convLib.CONVERTERS || [];
+        const filtered = allConvs.filter((c: any) => {
           const matchFrom = !fromFilter || c.from.toLowerCase() === fromFilter;
           const matchTo = !toFilter || c.to.toLowerCase() === toFilter;
           return matchFrom && matchTo;
         });
-        candidateConversions = filtered.map((c) => ({ from: c.from.toLowerCase(), to: c.to.toLowerCase() }));
+        
+        for (const c of filtered) {
+          const engines = await reg.resolveAvailableEngines(c.from, c.to);
+          candidateConversions.push({
+            from: c.from.toLowerCase(),
+            to: c.to.toLowerCase(),
+            engineId: engines[0]?.moduleId,
+          });
+        }
       }
 
       return {
@@ -220,7 +229,7 @@ async function main() {
     const fileBase64 = fs.readFileSync(fixturePath).toString('base64');
     const originalName = path.basename(fixturePath);
 
-    const targetEngine = options.engine || 'ffmpeg-core-mt';
+    const targetEngine = options.engine || conv.engineId || 'ffmpeg-core-mt';
     process.stdout.write(`• Testando [${conv.from.toUpperCase()} -> ${conv.to.toUpperCase()}] (${targetEngine})... `);
 
     let ddResult: any;
@@ -443,6 +452,40 @@ async function main() {
                       };
                     }
                   } catch {}
+                }
+              }
+
+              // 3. Document / PDF Output Assertion
+              if (toExt.toLowerCase() === 'pdf' && out) {
+                const u8Data = out.outputData || new Uint8Array(await (out.outputBlob as Blob).arrayBuffer());
+                if (u8Data.byteLength < 10) {
+                  return { success: false, error: 'ASSERTION FAILED: O arquivo PDF gerado está vazio.', logs: logs.slice(-6) };
+                }
+                // Verify %PDF- magic signature (0x25, 0x50, 0x44, 0x46, 0x2D)
+                if (u8Data[0] !== 0x25 || u8Data[1] !== 0x50 || u8Data[2] !== 0x44 || u8Data[3] !== 0x46) {
+                  return { success: false, error: 'ASSERTION FAILED: O arquivo gerado não possui a assinatura válida de cabeçalho PDF (%PDF-).', logs: logs.slice(-6) };
+                }
+                // If pageRange '1' was requested, verify exactly 1 page
+                if (modifiers?.pageRange === '1') {
+                  try {
+                    const { PDFDocument } = await import('pdf-lib');
+                    const pdfDoc = await PDFDocument.load(u8Data, { ignoreEncryption: true });
+                    if (pdfDoc.getPageCount() !== 1) {
+                      return {
+                        success: false,
+                        error: `ASSERTION FAILED: O PDF gerado tem ${pdfDoc.getPageCount()} páginas, mas o modificador solicitava apenas a primeira página (1).`,
+                        logs: logs.slice(-6),
+                      };
+                    }
+                  } catch {}
+                }
+              }
+
+              // 4. Image Output Assertion (PNG)
+              if (toExt.toLowerCase() === 'png' && out) {
+                const u8Data = out.outputData || new Uint8Array(await (out.outputBlob as Blob).arrayBuffer());
+                if (u8Data.byteLength < 8 || u8Data[0] !== 0x89 || u8Data[1] !== 0x50 || u8Data[2] !== 0x4E || u8Data[3] !== 0x47) {
+                  return { success: false, error: 'ASSERTION FAILED: O arquivo PNG gerado não possui assinatura válida (0x89PNG).', logs: logs.slice(-6) };
                 }
               }
 

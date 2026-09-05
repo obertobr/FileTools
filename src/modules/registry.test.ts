@@ -229,5 +229,47 @@ describe('Module Registry', () => {
       const pngToPdf = await resolveAvailableEngines('PNG', 'PDF', 'image/png');
       expect(pngToPdf.find(e => e.moduleId === 'magick-wasm')).toBeDefined();
     });
+
+    it('resolves LibreOfficeModule across office documents (DOCX, XLSX, PPTX, ODT, ODS, ODP, PDF)', async () => {
+      const docxToPdf = await resolveAvailableEngines('DOCX', 'PDF');
+      const loDocx = docxToPdf.find(e => e.moduleId === 'libreoffice');
+      expect(loDocx).toBeDefined();
+
+      const xlsxToPdf = await resolveAvailableEngines('XLSX', 'PDF');
+      const loXlsx = xlsxToPdf.find(e => e.moduleId === 'libreoffice');
+      expect(loXlsx).toBeDefined();
+
+      const pptxToPdf = await resolveAvailableEngines('PPTX', 'PDF');
+      const loPptx = pptxToPdf.find(e => e.moduleId === 'libreoffice');
+      expect(loPptx).toBeDefined();
+
+      const odtToDocx = await resolveAvailableEngines('ODT', 'DOCX');
+      const loOdt = odtToDocx.find(e => e.moduleId === 'libreoffice');
+      expect(loOdt).toBeDefined();
+
+      const odsToXlsx = await resolveAvailableEngines('ODS', 'XLSX');
+      const loOds = odsToXlsx.find(e => e.moduleId === 'libreoffice');
+      expect(loOds).toBeDefined();
+
+      const pdfToPng = await resolveAvailableEngines('PDF', 'PNG');
+      const loPdfToPng = pdfToPng.find(e => e.moduleId === 'libreoffice');
+      expect(loPdfToPng).toBeDefined();
+    });
+
+    it('validates supportedModifiers across LibreOffice, PDF-Lib and ImageMagick', async () => {
+      const { ModuleRegistry } = await import('./registry');
+
+      const lo = ModuleRegistry['libreoffice'];
+      expect(lo.manifest.supportedModifiers).toContain('page_range');
+      expect(lo.manifest.supportedModifiers).toContain('pdf_compliance');
+      expect(lo.manifest.supportedModifiers).toContain('image_dpi');
+      expect(lo.manifest.supportedModifiers).toContain('quality');
+
+      const pdf = ModuleRegistry['pdf-lib'];
+      expect(pdf.manifest.supportedModifiers).toContain('page_range');
+
+      const magick = ModuleRegistry['magick-wasm'];
+      expect(magick.manifest.supportedModifiers).toContain('image_dpi');
+    });
   });
 });

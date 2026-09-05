@@ -10,7 +10,7 @@
 * **Isolamento de Threads:** Web Workers + `comlink` (Processamento pesado fora da main thread).
 * **File System:** API OPFS (Origin Private File System) para manipulação de arquivos com alta performance e sem estouro de RAM.
 * **PWA:** `vite-plugin-pwa` (Cache API e Service Worker offline-first).
-* **Motores de Conversão (MVP):** `@ffmpeg/ffmpeg` (Wasm MT/ST), `@imagemagick/magick-wasm`, `mediabunny` (GPU WebCodecs + Transmuxer universal), `mp4box` (ISO-BMFF), `pdf-lib`, `mammoth`, `xlsx` (SheetJS).
+* **Motores de Conversão (MVP):** `@matbee/libreoffice-converter` (LibreOffice Technology WASM com suporte a Writer, Calc, Impress, Draw), `@ffmpeg/ffmpeg` (Wasm MT/ST), `@imagemagick/magick-wasm`, `mediabunny` (GPU WebCodecs + Transmuxer universal), `mp4box` (ISO-BMFF), `pdf-lib`, `mammoth`, `xlsx` (SheetJS).
 
 ---
 
@@ -153,6 +153,7 @@ A suíte de testes foca em regras de negócio críticas:
 │   │       ├── webm-muxer.ts        # Motor WebM Muxer (WebCodecs VP9 GPU)
 │   │       ├── mp4box.ts            # Motor MP4Box (ISO-BMFF, extração direta)
 │   │       ├── magick.ts            # Motor ImageMagick WASM
+│   │       ├── libreoffice.ts       # Motor LibreOffice Technology WASM (Universal Docs)
 │   │       ├── pdf.ts               # Motor pdf-lib
 │   │       ├── mammoth.ts           # Motor mammoth.js (DOCX)
 │   │       ├── sheetjs.ts           # Motor SheetJS (planilhas)
@@ -182,7 +183,10 @@ A suíte de testes foca em regras de negócio críticas:
 │   │   │   │   ├── BitDepthCard.tsx        # Card: profundidade de bits de cor
 │   │   │   │   ├── BitrateCard.tsx         # Card: taxa de bits
 │   │   │   │   ├── ColorSpaceCard.tsx      # Card: espaço de cor
-│   │   │   │   └── DurationCard.tsx        # Card: duração imagem->vídeo
+│   │   │   │   ├── DurationCard.tsx        # Card: duração imagem->vídeo
+│   │   │   │   ├── PageRangeCard.tsx       # Card: intervalo de páginas (documentos/PDFs)
+│   │   │   │   ├── PdfComplianceCard.tsx   # Card: conformidade PDF/A (arquivística)
+│   │   │   │   └── ImageDpiCard.tsx        # Card: densidade de renderização DPI
 │   │   │   └── ...                  # Componentes de negócio (ConvertPanel, etc.)
 │   │   └── layouts/                 # Layouts Astro e App Shell
 │   └── pages/                       # Roteamento Astro SSG
@@ -227,22 +231,25 @@ O sistema de opções avançadas (Pilha de Modificadores (Modifier Stack)) obede
 
 ### 12.1. Matriz de Compatibilidade Motor x Capacidade
 
-| Modificador | Remux (`remux`) | FFmpeg Multi-Thread (`ffmpeg-core-mt`) | FFmpeg Single-Thread (`ffmpeg-core`) |
-|---|:---:|:---:|:---:|
-| **Cópia Instantânea (`-c copy`)** | Sim | Sim | Sim |
-| **Taxa de Quadros (`-r fps`)** | ❌ Incompatível | ✅ Total | ✅ Total |
-| **Escala / Resolução (`-vf scale`)** | ❌ Incompatível | ✅ Total | ✅ Total |
-| **Qualidade / CRF** | ❌ Incompatível | ✅ Total | ✅ Total |
-| **Taxa de Bits / Bitrate (`-b:v`, `-b:a`)** | ❌ Incompatível | ✅ Total | ✅ Total |
-| **Formato de Pixel (`-pix_fmt`)** | ❌ Incompatível | ✅ Total | ✅ Total |
-| **Profundidade de Cor (8/10/12-bit)** | ❌ Incompatível | ✅ Total | ✅ Total |
-| **Espaço de Cor (`-colorspace`)** | ❌ Incompatível | ✅ Total | ✅ Total |
-| **Transcodificação de Codec** | ❌ Incompatível | ✅ Total | ✅ Total |
-| **Unir Faixas (`amix` filter)** | ❌ Incompatível | ✅ Total | ✅ Total |
-| **Seleção de Faixas de Áudio** | ✅ Suportado | ✅ Total | ✅ Total |
-| **Subtítulos Embutidos** | ✅ Suportado | ✅ Total | ✅ Total |
-| **Duração Imagem -> Vídeo** | ❌ Incompatível | ✅ Total | ✅ Total |
-| **Controle de Threads (`-threads`)** | ❌ Incompatível | ✅ Total (Multi-Core) | ❌ Incompatível (WASM 1 thread) |
+| Modificador | Remux (`remux`) | FFmpeg MT (`ffmpeg-core-mt`) | FFmpeg ST (`ffmpeg-core`) | LibreOffice (`libreoffice`) | PDF-Lib (`pdf-lib`) | ImageMagick (`magick-wasm`) |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Cópia Instantânea (`-c copy`)** | Sim | Sim | Sim | ❌ | ❌ | ❌ |
+| **Taxa de Quadros (`-r fps`)** | ❌ Incompatível | ✅ Total | ✅ Total | ❌ | ❌ | ❌ |
+| **Escala / Resolução (`-vf scale`)** | ❌ Incompatível | ✅ Total | ✅ Total | ❌ | ❌ | ✅ Total |
+| **Qualidade / CRF / Compressão** | ❌ Incompatível | ✅ Total | ✅ Total | ✅ (PDF/Imagens) | ❌ | ✅ Total |
+| **Taxa de Bits / Bitrate (`-b:v`, `-b:a`)** | ❌ Incompatível | ✅ Total | ✅ Total | ❌ | ❌ | ❌ |
+| **Formato de Pixel (`-pix_fmt`)** | ❌ Incompatível | ✅ Total | ✅ Total | ❌ | ❌ | ❌ |
+| **Profundidade de Cor (8/10/12-bit)** | ❌ Incompatível | ✅ Total | ✅ Total | ❌ | ❌ | ❌ |
+| **Espaço de Cor (`-colorspace`)** | ❌ Incompatível | ✅ Total | ✅ Total | ❌ | ❌ | ❌ |
+| **Transcodificação de Codec** | ❌ Incompatível | ✅ Total | ✅ Total | ❌ | ❌ | ❌ |
+| **Unir Faixas (`amix` filter)** | ❌ Incompatível | ✅ Total | ✅ Total | ❌ | ❌ | ❌ |
+| **Seleção de Faixas de Áudio** | ✅ Suportado | ✅ Total | ✅ Total | ❌ | ❌ | ❌ |
+| **Subtítulos Embutidos** | ✅ Suportado | ✅ Total | ✅ Total | ❌ | ❌ | ❌ |
+| **Duração Imagem -> Vídeo** | ❌ Incompatível | ✅ Total | ✅ Total | ❌ | ❌ | ❌ |
+| **Controle de Threads (`-threads`)** | ❌ Incompatível | ✅ Total (Multi-Core) | ❌ Incompatível | ❌ Incompatível | ❌ Incompatível | ❌ Incompatível |
+| **Intervalo de Páginas (`page_range`)** | ❌ Incompatível | ❌ Incompatível | ❌ Incompatível | ✅ Total | ✅ Total | ❌ Incompatível |
+| **Conformidade PDF/A (`pdf_compliance`)** | ❌ Incompatível | ❌ Incompatível | ❌ Incompatível | ✅ Total | ❌ Incompatível | ❌ Incompatível |
+| **Densidade de Renderização (`image_dpi`)** | ❌ Incompatível | ❌ Incompatível | ❌ Incompatível | ✅ Total | ❌ Incompatível | ✅ Total |
 
 
 ### 12.2. Inversão de Controle no ModuleManifest (`supportedModifiers`)
@@ -315,27 +322,97 @@ export interface ModifierContext {
 
 ---
 
-## 14. Sistema de Teste de Conversões com Delta Debugging (DDmin)
+## 14. Sistema de Teste de Conversões com Delta Debugging (DDmin) e Testes Dinâmicos
 
-Para garantir cobertura total das centenas de pares de conversão sem incorrer em execuções de dezenas de horas, o FileTools adota o algoritmo **Delta Debugging (DDmin)** com **Escopo Direcionado**:
+Para garantir cobertura total das centenas de pares de conversão sem incorrer em execuções lentas ou frágeis, o FileTools adota **estritamente a ferramenta central de testes dinâmicos** combinada ao algoritmo **Delta Debugging (DDmin)**:
 
-1. **Localização**:
+1. **Localização e Ferramentas Oficiais**:
+   - CLI Runner Dinâmico: [`scripts/test-conversion.ts`](../scripts/test-conversion.ts)
    - Motor DDmin: [`src/core/testing/deltaDebugger.ts`](../src/core/testing/deltaDebugger.ts)
-   - Testes Unitários: [`src/core/testing/deltaDebugger.test.ts`](../src/core/testing/deltaDebugger.test.ts)
-   - CLI Runner: [`scripts/test-conversion.ts`](../scripts/test-conversion.ts)
-   - Teste E2E Playwright: [`e2e/test-delta-debugging.spec.ts`](../e2e/test-delta-debugging.spec.ts)
+   - Testes Unitários do Motor DDmin: [`src/core/testing/deltaDebugger.test.ts`](../src/core/testing/deltaDebugger.test.ts)
    - Protocolo Normativo: [`docs/protocols/delta-debugging.md`](./protocols/delta-debugging.md)
 
-2. **Fluxo Operacional**:
-   - **Fast-Path ($C_{max}$)**: Aplica todos os modificadores válidos suportados pelo motor. Se passar, o teste termina em 1 ciclo (~1s).
-   - **Baseline ($C = \emptyset$)**: Se $C_{max}$ falhar, avalia se a conversão básica é suportada pelo motor.
-   - **Singleton ($|C| = 1$)**: Se o baseline passar, testa modificadores individualmente.
-   - **Bissecção Binária**: Bissecção recursiva de partições e complementos até isolar o subconjunto conflitante mínimo.
+2. **Proibição Absoluta de Testes Genéricos, Arquivos Avulsos ou Sessões Externas de Navegador**:
+   - **É expressamente proibido criar testes unitários genéricos, mocks falsos ou scripts avulsos de teste**: Toda e qualquer validação de conversão deve ser executada exclusivamente pelo test runner dinâmico oficial (`scripts/test-conversion.ts`).
+   - **Não abrir navegadores interativos para testes manuais**: O runner dinâmico inicializa instâncias headless do Chromium internamente via Playwright para avaliar os binários WebAssembly no ambiente real com isolamento de threads.
+   - Se houver necessidade de modularizar ou estender a lógica de teste, isso deve ser feito dentro da arquitetura de `src/core/testing/`, mantendo `scripts/test-conversion.ts` como ponto de entrada unificado.
 
-3. **Comando para Desenvolvedores**:
+3. **Priorização de Execução DDmin (Estresse Máximo em 1º Lugar)**:
+   - **Etapa 1 (Estresse Máximo - `C_max`)**: O teste inicia sempre aplicando cumulativamente **todos** os modificadores suportados pelo motor para o par de formatos ativo. Essa priorização expõe imediatamente erros de sobreposição, incompatibilidades de filtros ou falhas de memória. Se o estresse máximo passar, o teste valida o baseline limpo e conclui como `PASS` em velocidade máxima.
+   - **Etapa 2 (Diagnóstico Baseline)**: Se o estresse máximo falhar, o algoritmo executa a conversão padrão limpa (0 modificadores). Se o baseline falhar, emite `FAIL_BASELINE` (falha inerente ao motor para o par).
+   - **Etapa 3 (Isolamento Singleton)**: Se o baseline funcionou, o DDmin testa cada modificador isoladamente (pilha de 1 modificador). Se um modificador específico falhar, emite `FAIL_SINGLETON`.
+   - **Etapa 4 (Bisseção Binária DDmin)**: Se todos os singletons passarem, o algoritmo particiona recursivamente a pilha de modificadores para isolar a menor combinação de conflito (`FAIL_INTERACTION`).
+
+4. **Mandato Obrigatório para Extensões (Motores, Modificadores e Tipos de Arquivo)**:
+   Sempre que um desenvolvedor ou agente adicionar uma nova funcionalidade ao FileTools, é **obrigatório** verificar se a ferramenta de testes dinâmicos (`scripts/test-conversion.ts`) é capaz de testar o que foi adicionado:
+   - **Ao Adicionar um Novo Motor (`IModule`)**:
+     1. Declarar obrigatoriamente `supportedConversions` e `supportedModifiers` no manifesto do motor.
+     2. Executar: `npx tsx scripts/test-conversion.ts --engine=<id_do_motor>`.
+     3. O test runner dinâmico deve descobrir todas as conversões do novo motor automaticamente, aplicar os fixtures correspondentes e passar em 100% dos pares sob Estresse Máximo e Baseline.
+   - **Ao Adicionar um Novo Modificador (`ModifierCategoryId`)**:
+     1. Registrar a definição do modificador em `src/shared/types/conversionModifiers.ts` e `ModifierDefinitions.ts`.
+     2. Registrar a geração de patch e estresse em `src/core/testing/deltaDebugger.ts` (`getApplicableModifierPool`).
+     3. Adicionar asserções de validação de saída em `scripts/test-conversion.ts` para verificar que o modificador realmente alterou o arquivo de saída (ex: conferindo cabeçalho binário, dimensões, FPS ou páginas).
+     4. Executar os testes dinâmicos para comprovar que todos os motores que suportam o novo modificador passam no teste.
+   - **Ao Adicionar um Novo Tipo de Arquivo / Formato**:
+     1. Registrar a extensão em `src/lib/formats.ts` com sua respectiva categoria.
+     2. Criar uma amostra representativa real em `tests/fixtures/sample.<ext>`.
+     3. Rodar `npx tsx scripts/test-conversion.ts --from=<ext>` e `npx tsx scripts/test-conversion.ts --to=<ext>` para validar que o runner dinâmico consegue carregar a fixture e exercitar as conversões de entrada e saída.
+
+5. **Comandos para Desenvolvedores**:
    ```bash
-   # Testar conversão específica em segundos
+   # Testar motor específico em todas as suas conversões declaradas
+   npx tsx scripts/test-conversion.ts --engine=libreoffice
+   npx tsx scripts/test-conversion.ts --engine=pdf-lib
+   npx tsx scripts/test-conversion.ts --engine=magick-wasm
+   npx tsx scripts/test-conversion.ts --engine=ffmpeg-core-mt
+
+   # Testar formato de entrada específico
+   npx tsx scripts/test-conversion.ts --from=pdf --engine=libreoffice
+   npx tsx scripts/test-conversion.ts --from=docx --engine=libreoffice
+
+   # Testar conversão pontual com DDmin
+   npx tsx scripts/test-conversion.ts --from=docx --to=pdf --engine=libreoffice
+   npx tsx scripts/test-conversion.ts --from=pdf --to=png --engine=libreoffice
    npx tsx scripts/test-conversion.ts --from=mkv --to=webm
-   # ou via npm
-   npm run test:conversion -- --from=mkv --to=webm
    ```
+
+---
+
+## 15. Motor LibreOffice Technology WASM e Conversões Universais
+
+O motor `libreoffice` (`src/modules/engines/libreoffice.ts`) integra a tecnologia oficial do LibreOffice compilada para WebAssembly (`@matbee/libreoffice-converter`), oferecendo fidelidade absoluta na renderização e conversão de documentos de escritório:
+
+### 15.1. Arquitetura e Isolamento de Threads
+1. **Binários e Dados (`public/wasm/libreoffice/`)**:
+   - Contém o núcleo C++ compilado do LibreOffice (`soffice.wasm`), o sistema de arquivos virtual com fontes e configurações (`soffice.data`), o loader JavaScript (`soffice.js`) e o Web Worker estático (`browser.worker.global.js`).
+   - Os arquivos são servidos com cabeçalhos COOP/COEP (`Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Embedder-Policy: require-corp`) para habilitar `SharedArrayBuffer` e pthreads no navegador.
+2. **Isolamento de Worker (`MAIN_THREAD_MODULES`)**:
+   - Como o LibreOffice WASM utiliza pthreads e orquestra seus próprios Web Workers internos (`WorkerBrowserConverter`), criar instâncias aninhadas dentro do Comlink Worker causa deadlocks no navegador.
+   - O motor é registrado em `MAIN_THREAD_MODULES` (`src/core/engine/WorkerManager.ts`), delegando a carga pesada para o Web Worker dedicado do próprio LibreOffice.
+3. **Pilar 2: Zero-RAM Streaming e Limpeza**:
+   - As conversões utilizam buffers isolados do descritor de arquivo nativo e descartam imediatamente estruturas intermediárias após a gravação do arquivo de saída.
+
+### 15.2. Formatos e Capacidades Nativas Declaradas
+Em conformidade com o **Pilar 1 (Desacoplamento Canônico - Engines "Burras")**, o motor `libreoffice` executa estritamente as conversões nativas que o núcleo C++ do LibreOfficeKit suporta sem perda ou degradação artificial:
+1. **Writer (Processador de Texto)**:
+   - `doc`, `docx`, `odt`, `rtf`, `txt`, `html`, `htm`, `epub` -> `pdf`, `docx`, `doc`, `odt`, `rtf`, `txt`, `png`, `jpg`, `jpeg`, `webp`.
+2. **Calc (Planilhas)**:
+   - `xls`, `xlsx`, `ods`, `csv` -> `pdf`, `xlsx`, `xls`, `ods`, `csv`, `html`, `png`, `jpg`, `jpeg`, `webp`.
+3. **Impress (Apresentações)**:
+   - `ppt`, `pptx`, `odp` -> `pdf`, `pptx`, `ppt`, `odp`, `png`, `jpg`, `jpeg`, `webp`, `svg`.
+4. **Draw (Desenhos Vetoriais e Documentos PDF)**:
+   - `odg`, `pdf` -> `pdf`, `png`, `jpg`, `jpeg`, `webp`, `svg`.
+   - *Nota Arquitetural sobre PDF -> DOCX*: No núcleo do LibreOffice, arquivos PDF são importados exclusivamente no componente Draw, que não possui filtro de saída para formatos de texto (`docx`, `doc`, `odt`). Não são permitidas simulações ou pontes artificiais dentro do motor do LibreOffice. Futuramente, quando uma biblioteca especializada em reconstrução de layout ou extração de fluxo for incorporada, ela será introduzida como um motor independente e desacoplado.
+
+### 15.3. Modificadores de Documentos Suportados
+1. **Intervalo de Páginas (`page_range`)**:
+   - Permite extrair intervalos de páginas ou páginas individuais (ex: `1-3, 5`, ou `1`).
+   - Suportado no `libreoffice` e no `pdf-lib` (`src/modules/engines/pdf.ts`).
+2. **Conformidade PDF/A (`pdf_compliance`)**:
+   - Gera documentos em formato arquivístico padronizado (`pdfa-1b`, `pdfa-2b`, `pdfa-3b`).
+   - Suportado no `libreoffice` via filtros nativos de exportação PDF.
+3. **Densidade de Renderização (`image_dpi`)**:
+   - Controla a resolução em DPI (72 a 600 DPI) para conversão de documentos em imagens (`png`, `jpg`, `webp`).
+   - Suportado no `libreoffice` e no `@imagemagick/magick-wasm`.
+

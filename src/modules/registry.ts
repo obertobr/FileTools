@@ -16,6 +16,7 @@ import { MagickModule } from './engines/magick';
 import { PdfModule } from './engines/pdf';
 import { MammothModule } from './engines/mammoth';
 import { SheetJSModule } from './engines/sheetjs';
+import { LibreOfficeModule } from './engines/libreoffice';
 
 export const ModuleRegistry: Record<string, IModule> = {
   'stream-copy': RemuxModule,
@@ -27,6 +28,7 @@ export const ModuleRegistry: Record<string, IModule> = {
   'pdf-lib': PdfModule,
   'mammoth': MammothModule,
   'sheetjs': SheetJSModule,
+  'libreoffice': LibreOfficeModule,
 };
 
 export function getAllManifests(): ModuleManifest[] {
