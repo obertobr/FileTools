@@ -98,7 +98,7 @@ export const MediabunnyModule: IModule = {
       },
       {
         from: ['.mp4', '.m4v', '.mov', '.3gp', '.mkv', '.webm'],
-        to: ['.aac', '.m4a', '.opus', '.ogg', '.wav'],
+        to: ['.m4a', '.opus', '.ogg', '.wav'],
         lossy: false,
         speedScore: 68,
         acceleration: 'gpu',

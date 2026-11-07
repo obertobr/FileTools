@@ -61,7 +61,14 @@ export const SheetJSModule: IModule = {
       }
     } else if (inputExt === '.html' || inputExt === '.htm') {
       const htmlText = new TextDecoder().decode(data);
-      workbook = XLSX.read(htmlText, { type: 'string' });
+      try {
+        workbook = XLSX.read(htmlText, { type: 'string' });
+        if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+          throw new Error('Nenhuma tabela (<table>) encontrada no documento HTML.');
+        }
+      } catch (err: unknown) {
+        throw new Error(`O arquivo HTML não contém dados tabulares legíveis pelo SheetJS: ${err instanceof Error ? err.message : String(err)}`);
+      }
     } else if (inputExt === '.csv' || inputExt === '.tsv' || inputExt === '.txt') {
       const text = new TextDecoder().decode(data);
       workbook = XLSX.read(text, { type: 'string' });
@@ -71,8 +78,8 @@ export const SheetJSModule: IModule = {
 
     context.onProgress(60, `Convertendo planilha para ${targetExt.toUpperCase()}...`);
 
-    const firstSheetName = workbook.SheetNames[0] || 'Sheet1';
-    const worksheet = workbook.Sheets[firstSheetName] || XLSX.utils.aoa_to_sheet([]);
+    const firstSheetName = (workbook?.SheetNames && workbook.SheetNames.length > 0) ? workbook.SheetNames[0] : 'Sheet1';
+    const worksheet = (workbook?.Sheets && workbook.Sheets[firstSheetName]) || XLSX.utils.aoa_to_sheet([]);
 
     let outputData: Uint8Array;
     const mimeType = getMimeType(targetExt);

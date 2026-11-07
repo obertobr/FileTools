@@ -250,7 +250,7 @@ export const LibreOfficeModule: IModule = {
 
     let finalOutputFileName = outputFileName;
 
-    if (resultData.byteLength >= 4 && resultData[0] === 0x50 && resultData[1] === 0x4b && resultData[2] === 0x03 && resultData[3] === 0x04) {
+    if (isImageOutput && resultData.byteLength >= 4 && resultData[0] === 0x50 && resultData[1] === 0x4b && resultData[2] === 0x03 && resultData[3] === 0x04) {
       const targetSinglePage = pageIndex !== undefined ? (pageIndex + 1) : (modifiers.pageRange === '1' ? 1 : undefined);
       if (targetSinglePage !== undefined) {
         const extracted = extractPageFromZip(resultData, targetSinglePage);

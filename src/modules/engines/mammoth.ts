@@ -54,7 +54,24 @@ export const MammothModule: IModule = {
 
     if (targetExt === '.html') {
       const result = await mammoth.convertToHtml({ arrayBuffer });
-      outputText = result.value;
+      const title = originalName.replace(/\.[^.]+$/, '');
+      outputText = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+    img { max-width: 100%; height: auto; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #ddd; padding: 8px; }
+  </style>
+</head>
+<body>
+${result.value}
+</body>
+</html>`;
     } else if (targetExt === '.md') {
       const mammothWithMarkdown = mammoth as unknown as {
         convertToMarkdown: (options: { arrayBuffer: ArrayBuffer }) => Promise<{ value: string; messages: unknown[] }>;

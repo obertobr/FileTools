@@ -118,19 +118,22 @@ export const MagickModule: IModule = {
       try {
         ImageMagick.read(inputBytes, (image) => {
           try {
-            // Apply DPI / Density if specified
-            if (options?.imageDpi && Number(options.imageDpi) > 0) {
+            // Apply DPI / Density if specified (skip on AVIF/HEIC where libaom/libheif crashes in Magick WASM)
+            const supportsDensity = outputExt !== '.avif' && outputExt !== '.heic';
+            if (supportsDensity && options?.imageDpi && Number(options.imageDpi) > 0) {
               const dpi = Number(options.imageDpi);
               image.density = new Density(dpi, DensityUnit.PixelsPerInch);
               context.onLog(`[ImageMagick] Densidade configurada para ${dpi} DPI.`);
             }
 
-            // Apply quality if specified
+            // Apply quality if specified (AVIF encoder crashes on quality 100 due to libaom chroma deltaq)
             if (options?.qualityPreset) {
               const q = options.qualityPreset;
-              image.quality = q === 'original' ? 100 : (q === 'balanced' ? 85 : 70);
+              const val = q === 'original' ? 100 : (q === 'balanced' ? 85 : 70);
+              image.quality = outputExt === '.avif' ? Math.min(99, val) : val;
             } else if (options?.quality) {
-              image.quality = Math.max(1, Math.min(100, Number(options.quality) || 85));
+              const val = Math.max(1, Math.min(100, Number(options.quality) || 85));
+              image.quality = outputExt === '.avif' ? Math.min(99, val) : val;
             }
 
             // Apply resolution scaling if specified

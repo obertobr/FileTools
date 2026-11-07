@@ -69,6 +69,7 @@ export function ConvertPanel({
   const [failedEngineName, setFailedEngineName] = useState<string>('');
   const [outputUrl, setOutputUrl] = useState<string | null>(null);
   const [outputSize, setOutputSize] = useState<number>(0);
+  const [downloadFileName, setDownloadFileName] = useState<string>('');
 
   const target = fixedTarget ?? selected;
   const sourceExt = file ? describeFile(file.name).ext : null;
@@ -209,6 +210,7 @@ export function ConvertPanel({
     if (outputUrl) URL.revokeObjectURL(outputUrl);
     setOutputUrl(null);
     setOutputSize(0);
+    setDownloadFileName('');
     if (!fixedTarget) setSelected(null);
   }
 
@@ -275,6 +277,8 @@ export function ConvertPanel({
         }
         setOutputUrl(URL.createObjectURL(blob));
         setOutputSize(outputSize);
+        const resolvedName = (result.outputFileName as string) || (file && target ? file.name.replace(/\.[^.]+$/, '') + '.' + target.replace(/^\./, '').toLowerCase() : '');
+        setDownloadFileName(resolvedName);
       } else {
         throw new Error('Nenhum dado de saída retornado pelo motor de conversão.');
       }
@@ -469,7 +473,7 @@ export function ConvertPanel({
 
       {status === 'done' && (
         <DownloadResult
-          fileName={outputName}
+          fileName={downloadFileName || outputName}
           size={outputSize}
           blobUrl={outputUrl ?? undefined}
           onReset={reset}

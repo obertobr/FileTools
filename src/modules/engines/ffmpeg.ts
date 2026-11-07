@@ -137,7 +137,12 @@ function getConversionArgs(inputExt: string, outputExt: string, options?: Conver
       audioMapFlags = ['-map', '0:v:0', ...selected.flatMap((idx) => ['-map', `0:a:${idx}?`])];
     }
   } else {
-    audioMapFlags = ['-map', '0:v:0', '-map', '0:a?'];
+    audioMapFlags = (to === '.flv' || to === 'flv') ? ['-map', '0:v:0', '-map', '0:a:0?'] : ['-map', '0:v:0', '-map', '0:a?'];
+  }
+
+  // FLV container only supports a single audio stream
+  if ((to === '.flv' || to === 'flv') && audioMapFlags.length > 4) {
+    audioMapFlags = ['-map', '0:v:0', '-map', '0:a:0?'];
   }
 
   // Quality CRF tuning

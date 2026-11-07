@@ -72,11 +72,12 @@ export const MP4BoxModule: IModule = {
 
       try {
         const mp4boxfile = MP4Box.createFile();
-        const collectedChunks: Uint8Array[] = [];
         let totalSamples = 0;
         let processedSamples = 0;
-        let selectedTrack: MP4Box.MP4Track | null = null;
-        let isAudioTarget = outputExt === '.m4a' || outputExt === '.aac' || outputExt === '.m4r';
+        const isAacTarget = outputExt === '.aac';
+        const isAudioTarget = outputExt === '.m4a' || outputExt === '.aac' || outputExt === '.m4r';
+        const adtsChunks: Uint8Array[] = [];
+        const FREQ_MAP = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
 
         mp4boxfile.onError = (module: string, msg: string) => {
           if (processedSamples > 0) {
@@ -94,67 +95,69 @@ export const MP4BoxModule: IModule = {
                 fail('Nenhuma trilha de áudio encontrada no contêiner MP4 para extração.');
                 return;
               }
-              selectedTrack = audioTrack;
               totalSamples = audioTrack.nb_samples || 100;
               const sampleRate = (audioTrack as any).audio?.sample_rate || 44100;
               context.onLog(`[MP4Box] Trilha de áudio detectada: ${audioTrack.codec}, ${sampleRate} Hz, ${totalSamples} amostras.`);
-              mp4boxfile.setExtractionOptions(audioTrack.id, null, { nbSamples: 10000 });
-              mp4boxfile.start();
+
+              if (isAacTarget) {
+                const freqIndex = Math.max(0, FREQ_MAP.indexOf(sampleRate));
+                const channels = (audioTrack as any).audio?.channel_count || 2;
+                const profile = 2; // AAC-LC
+
+                mp4boxfile.onSamples = (_id: number, _user: unknown, samples: MP4Box.MP4Sample[]) => {
+                  for (const sample of samples) {
+                    if (sample.data) {
+                      const frameLen = sample.data.byteLength + 7;
+                      const header = new Uint8Array(7);
+                      header[0] = 0xFF;
+                      header[1] = 0xF1;
+                      header[2] = ((profile - 1) << 6) | (freqIndex << 2) | ((channels >> 2) & 1);
+                      header[3] = ((channels & 3) << 6) | ((frameLen >> 11) & 3);
+                      header[4] = (frameLen >> 3) & 0xFF;
+                      header[5] = ((frameLen & 7) << 5) | 0x1F;
+                      header[6] = 0xFC;
+                      adtsChunks.push(header);
+                      adtsChunks.push(new Uint8Array(sample.data.buffer, sample.data.byteOffset, sample.data.byteLength));
+                    }
+                    processedSamples++;
+                  }
+                  const pct = Math.min(99, Math.round((processedSamples / Math.max(1, totalSamples)) * 100));
+                  context.onProgress(pct, `Extraindo fluxo AAC... ${pct}%`);
+                  if (processedSamples >= totalSamples || samples.length === 0) {
+                    finishAac();
+                  }
+                };
+
+                mp4boxfile.setExtractionOptions(audioTrack.id, null, { nbSamples: 10000 });
+                mp4boxfile.start();
+              }
             } else {
-              // Video / MP4 pass-through or track extraction
               const vTrack = info.videoTracks[0];
               if (!vTrack) {
                 fail('Nenhuma trilha de vídeo encontrada no arquivo.');
                 return;
               }
-              selectedTrack = vTrack;
               totalSamples = vTrack.nb_samples || 100;
               context.onLog(`[MP4Box] Trilha de vídeo detectada: ${vTrack.track_width}x${vTrack.track_height}, codec ${vTrack.codec}.`);
-              mp4boxfile.setExtractionOptions(vTrack.id, null, { nbSamples: 10000 });
-              mp4boxfile.start();
             }
           } catch (err) {
             fail(err instanceof Error ? err : String(err));
           }
         };
 
-        mp4boxfile.onSamples = (_id: number, _user: unknown, samples: MP4Box.MP4Sample[]) => {
-          try {
-            for (const sample of samples) {
-              if (sample.data) {
-                collectedChunks.push(new Uint8Array(sample.data.buffer, sample.data.byteOffset, sample.data.byteLength));
-              }
-              processedSamples++;
-            }
-
-            const percent = Math.min(99, Math.round((processedSamples / Math.max(1, totalSamples)) * 100));
-            context.onProgress(percent, `Extraindo amostras ISO-BMFF... ${percent}%`);
-
-            if (processedSamples >= totalSamples || samples.length === 0) {
-              finish();
-            }
-          } catch (err) {
-            fail(err instanceof Error ? err : String(err));
-          }
-        };
-
-        function finish() {
+        function finishAac() {
           if (isSettled) return;
           isSettled = true;
-
-          const totalBytes = collectedChunks.reduce((acc, c) => acc + c.byteLength, 0);
+          const totalBytes = adtsChunks.reduce((acc, c) => acc + c.byteLength, 0);
           const merged = new Uint8Array(totalBytes);
           let offset = 0;
-          for (const c of collectedChunks) {
+          for (const c of adtsChunks) {
             merged.set(c, offset);
             offset += c.byteLength;
           }
-
-          context.onProgress(100, 'Extração MP4Box concluída com sucesso!');
-          context.onLog(`[MP4Box] Sucesso: gerado ${outputFileName} (${(totalBytes / 1024 / 1024).toFixed(2)} MB, zero re-encode)`);
-
-          const outputBlob = new Blob([merged.buffer], { type: mimeType });
-
+          context.onProgress(100, 'Extração AAC concluída com sucesso!');
+          context.onLog(`[MP4Box] Sucesso: gerado ${outputFileName} (${(totalBytes / 1024).toFixed(1)} KB)`);
+          const outputBlob = new Blob([merged.buffer as unknown as BlobPart], { type: mimeType });
           resolve({
             outputData: merged,
             outputBlob,
@@ -162,6 +165,38 @@ export const MP4BoxModule: IModule = {
             outputSize: totalBytes,
             mimeType,
           });
+        }
+
+        function finishIsoContainer() {
+          if (isSettled) return;
+          isSettled = true;
+          try {
+            if (isAudioTarget) {
+              const audioTrack = (mp4boxfile as any).moov?.traks?.find((t: any) => t.mdia?.hdlr?.handler === 'soun');
+              if (audioTrack && (mp4boxfile as any).moov?.traks) {
+                (mp4boxfile as any).moov.traks = [audioTrack];
+              }
+              if ((mp4boxfile as any).ftyp) {
+                (mp4boxfile as any).ftyp.major_brand = 'M4A ';
+                (mp4boxfile as any).ftyp.compatible_brands = ['M4A ', 'mp42', 'isom'];
+              }
+            }
+
+            const stream = (mp4boxfile as any).getBuffer();
+            const outputData = new Uint8Array(stream.buffer);
+            context.onProgress(100, 'Processamento ISO-BMFF concluído com sucesso!');
+            context.onLog(`[MP4Box] Sucesso: gerado contêiner ${outputFileName} (${(outputData.byteLength / 1024).toFixed(1)} KB)`);
+            const outputBlob = new Blob([outputData.buffer as unknown as BlobPart], { type: mimeType });
+            resolve({
+              outputData,
+              outputBlob,
+              outputFileName,
+              outputSize: outputData.byteLength,
+              mimeType,
+            });
+          } catch (err) {
+            fail(err instanceof Error ? err : String(err));
+          }
         }
 
         // Streaming in 2MB chunks (Pilar 2: Zero-RAM Streaming)
@@ -187,6 +222,10 @@ export const MP4BoxModule: IModule = {
               (rawBuffer as any).fileStart = 0;
               mp4boxfile.appendBuffer(rawBuffer, true);
               mp4boxfile.flush();
+            }
+
+            if (!isAacTarget) {
+              finishIsoContainer();
             }
           } catch (readErr) {
             fail(readErr instanceof Error ? readErr : String(readErr));
