@@ -4,8 +4,8 @@
  * Central registry for all conversion modules.
  * Manages engines, performance scoring, engine resolution, and dynamic conversion options.
  */
-import type { IModule, ModuleManifest, AccelerationType } from '@/shared/types/module';
-import { FORMATS } from '@/lib/formats';
+import type { IModule, ModuleManifest, AccelerationType } from '../shared/types/module';
+import { FORMATS } from '../lib/formats';
 
 import { RemuxModule } from './engines/remux';
 import { MP4BoxModule } from './engines/mp4box';

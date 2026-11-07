@@ -92,6 +92,39 @@ function mapPdfaLevel(compliance?: PdfComplianceChoice): 'PDF/A-1b' | 'PDF/A-2b'
   return undefined;
 }
 
+function extractPageFromZip(zipBytes: Uint8Array, targetPage = 1): Uint8Array | null {
+  let offset = 0;
+  const view = new DataView(zipBytes.buffer, zipBytes.byteOffset, zipBytes.byteLength);
+  const decoder = new TextDecoder();
+  let pageIndex = 1;
+
+  while (offset + 30 <= zipBytes.length) {
+    const signature = view.getUint32(offset, true);
+    if (signature !== 0x04034b50) break;
+
+    const compressionMethod = view.getUint16(offset + 8, true);
+    const compressedSize = view.getUint32(offset + 18, true);
+    const fileNameLength = view.getUint16(offset + 26, true);
+    const extraLength = view.getUint16(offset + 28, true);
+
+    const fileNameStart = offset + 30;
+    const fileName = decoder.decode(zipBytes.subarray(fileNameStart, fileNameStart + fileNameLength));
+    const fileDataStart = fileNameStart + fileNameLength + extraLength;
+    const fileDataEnd = fileDataStart + compressedSize;
+
+    if (fileDataEnd > zipBytes.length) break;
+
+    if (compressionMethod === 0) {
+      if (fileName.includes(`page_${targetPage}.`) || pageIndex === targetPage) {
+        return zipBytes.slice(fileDataStart, fileDataEnd);
+      }
+    }
+    pageIndex++;
+    offset = fileDataEnd;
+  }
+  return null;
+}
+
 export const LibreOfficeModule: IModule = {
   manifest: {
     id: 'libreoffice',
@@ -104,7 +137,7 @@ export const LibreOfficeModule: IModule = {
       // Documentos de Texto (Writer)
       {
         from: ['.doc', '.docx', '.odt', '.rtf', '.txt', '.html', '.htm', '.epub'],
-        to: ['.pdf', '.docx', '.doc', '.odt', '.rtf', '.txt', '.png', '.jpg', '.jpeg', '.webp'],
+        to: ['.pdf', '.docx', '.doc', '.odt', '.rtf', '.txt', '.html', '.png'],
         lossy: false,
         speedScore: 82,
         acceleration: 'cpu-multithread',
@@ -113,7 +146,7 @@ export const LibreOfficeModule: IModule = {
       // Planilhas (Calc)
       {
         from: ['.xls', '.xlsx', '.ods', '.csv'],
-        to: ['.pdf', '.xlsx', '.xls', '.ods', '.csv', '.html', '.png', '.jpg', '.jpeg', '.webp'],
+        to: ['.pdf', '.xlsx', '.xls', '.ods', '.csv', '.html', '.png'],
         lossy: false,
         speedScore: 82,
         acceleration: 'cpu-multithread',
@@ -122,7 +155,7 @@ export const LibreOfficeModule: IModule = {
       // Apresentações (Impress)
       {
         from: ['.ppt', '.pptx', '.odp'],
-        to: ['.pdf', '.pptx', '.ppt', '.odp', '.png', '.jpg', '.jpeg', '.webp', '.svg'],
+        to: ['.pdf', '.pptx', '.ppt', '.odp', '.png', '.svg', '.html'],
         lossy: false,
         speedScore: 80,
         acceleration: 'cpu-multithread',
@@ -131,7 +164,7 @@ export const LibreOfficeModule: IModule = {
       // Desenhos & Gráficos / Documentos PDF (Draw)
       {
         from: ['.odg', '.pdf'],
-        to: ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.svg'],
+        to: ['.pdf', '.png', '.svg', '.html'],
         lossy: false,
         speedScore: 80,
         acceleration: 'cpu-multithread',
@@ -167,95 +200,69 @@ export const LibreOfficeModule: IModule = {
     let resultData: Uint8Array;
     let resultMime: string = getMimeType('.' + cleanTargetExt);
 
-    const isImageOutput = ['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(cleanTargetExt);
-    const isTranscodeImage = ['jpg', 'jpeg', 'webp'].includes(cleanTargetExt);
+    const isImageOutput = ['png', 'svg'].includes(cleanTargetExt);
     const pdfa = mapPdfaLevel(modifiers.pdfCompliance);
     const pdfQuality = modifiers.pdfQuality ?? (modifiers.qualityPreset === 'original' ? 100 : modifiers.qualityPreset === 'compressed' ? 70 : 90);
     const dpi = modifiers.imageDpi || 150;
     const { pageIndex, pages } = parsePageRangeToIndices(modifiers.pageRange);
 
-    if (isTranscodeImage) {
-      // Pipeline: Target is JPG / WEBP (render to PNG in LibreOffice, then transcode with MagickModule)
-      context.onProgress(35, 'Renderizando visualização em alta fidelidade...');
-      const pngOptions: any = {
-        outputFormat: 'png',
-        image: {
-          dpi,
-          ...(modifiers.targetWidth ? { width: modifiers.targetWidth } : {}),
-          ...(modifiers.targetHeight ? { height: modifiers.targetHeight } : {}),
-          ...(pageIndex !== undefined ? { pageIndex } : {}),
-          ...(pages !== undefined ? { pages } : {}),
-        },
+    context.onProgress(40, 'Processando documento no LibreOffice WASM...');
+    const conversionOptions: any = {
+      outputFormat: cleanTargetExt,
+    };
+
+    if (cleanTargetExt === 'pdf') {
+      conversionOptions.pdf = {
+        quality: pdfQuality,
+        ...(pdfa ? { pdfaLevel: pdfa } : {}),
       };
+    }
 
-      let pngData: Uint8Array;
-      if (isBrowser) {
-        const converter = await getBrowserConverter(context);
-        const pngResult = await converter.convert(inputBytes, pngOptions, originalName);
-        pngData = pngResult.data;
-      } else {
-        const { convertDocument } = await import('@matbee/libreoffice-converter');
-        const wasmPath = './node_modules/@matbee/libreoffice-converter/wasm';
-        const pngResult = await convertDocument(inputBytes, pngOptions, { wasmPath, verbose: false });
-        pngData = pngResult.data;
+    if (isImageOutput) {
+      conversionOptions.image = {
+        dpi,
+        ...(modifiers.targetWidth ? { width: modifiers.targetWidth } : {}),
+        ...(modifiers.targetHeight ? { height: modifiers.targetHeight } : {}),
+        ...(pageIndex !== undefined ? { pageIndex } : {}),
+        ...(pages !== undefined ? { pages } : {}),
+      };
+    }
+
+    if (isBrowser) {
+      const converter = await getBrowserConverter(context);
+      context.onProgress(60, 'Convertendo no Web Worker isolado...');
+      const result = await converter.convert(inputBytes, conversionOptions, originalName);
+      resultData = result.data;
+      if (result.mimeType) {
+        resultMime = result.mimeType;
       }
-
-      context.onProgress(75, `Codificando imagem em formato ${cleanTargetExt.toUpperCase()}...`);
-      const { MagickModule } = await import('./magick');
-      const magickRes = await MagickModule.execute(
-        {
-          fileData: pngData,
-          originalName: 'page.png',
-          targetFormat: '.' + cleanTargetExt,
-          modifiers,
-        },
-        context
-      );
-      resultData =
-        (magickRes.outputData as Uint8Array) ||
-        new Uint8Array(await (magickRes.outputBlob as Blob).arrayBuffer());
-      resultMime = (magickRes.mimeType as string) || getMimeType('.' + cleanTargetExt);
     } else {
-      // Pipeline 3: Native direct LibreOffice conversion
-      context.onProgress(40, 'Processando documento no LibreOffice WASM...');
-      const conversionOptions: any = {
-        outputFormat: cleanTargetExt,
-      };
-
-      if (cleanTargetExt === 'pdf') {
-        conversionOptions.pdf = {
-          quality: pdfQuality,
-          ...(pdfa ? { pdfaLevel: pdfa } : {}),
-        };
+      const pkgName = '@matbee/libreoffice-converter';
+      const { convertDocument } = await import(/* @vite-ignore */ pkgName);
+      const wasmPath = './node_modules/@matbee/libreoffice-converter/wasm';
+      context.onProgress(60, 'Convertendo via LibreOffice Subprocess...');
+      const result = await convertDocument(inputBytes, conversionOptions, { wasmPath, verbose: false });
+      resultData = result.data;
+      if (result.mimeType) {
+        resultMime = result.mimeType;
       }
+    }
 
-      if (isImageOutput) {
-        conversionOptions.image = {
-          dpi,
-          ...(modifiers.targetWidth ? { width: modifiers.targetWidth } : {}),
-          ...(modifiers.targetHeight ? { height: modifiers.targetHeight } : {}),
-          ...(pageIndex !== undefined ? { pageIndex } : {}),
-          ...(pages !== undefined ? { pages } : {}),
-        };
-      }
+    let finalOutputFileName = outputFileName;
 
-      if (isBrowser) {
-        const converter = await getBrowserConverter(context);
-        context.onProgress(60, 'Convertendo no Web Worker isolado...');
-        const result = await converter.convert(inputBytes, conversionOptions, originalName);
-        resultData = result.data;
-        if (result.mimeType) {
-          resultMime = result.mimeType;
+    if (resultData.byteLength >= 4 && resultData[0] === 0x50 && resultData[1] === 0x4b && resultData[2] === 0x03 && resultData[3] === 0x04) {
+      const targetSinglePage = pageIndex !== undefined ? (pageIndex + 1) : (modifiers.pageRange === '1' ? 1 : undefined);
+      if (targetSinglePage !== undefined) {
+        const extracted = extractPageFromZip(resultData, targetSinglePage);
+        if (extracted && extracted.byteLength > 0) {
+          resultData = extracted;
+          resultMime = getMimeType('.' + cleanTargetExt);
+          context.onLog(`[LibreOffice WASM] Página ${targetSinglePage} extraída com sucesso (${(resultData.byteLength / 1024).toFixed(1)} KB)`);
         }
       } else {
-        const { convertDocument } = await import('@matbee/libreoffice-converter');
-        const wasmPath = './node_modules/@matbee/libreoffice-converter/wasm';
-        context.onProgress(60, 'Convertendo via LibreOffice Subprocess...');
-        const result = await convertDocument(inputBytes, conversionOptions, { wasmPath, verbose: false });
-        resultData = result.data;
-        if (result.mimeType) {
-          resultMime = result.mimeType;
-        }
+        finalOutputFileName = originalName.replace(/\.[^.]+$/, '') + '.zip';
+        resultMime = 'application/zip';
+        context.onLog('[LibreOffice WASM] Múltiplas páginas geradas. Entregando pacote ZIP compactado.');
       }
     }
 
@@ -263,12 +270,12 @@ export const LibreOfficeModule: IModule = {
     const outputBlob = new Blob([resultData.buffer as unknown as BlobPart], { type: resultMime });
 
     context.onProgress(100, 'Conversão de documento concluída!');
-    context.onLog(`[LibreOffice WASM] Concluído com sucesso: ${outputFileName} (${(resultData.byteLength / 1024).toFixed(1)} KB)`);
+    context.onLog(`[LibreOffice WASM] Concluído com sucesso: ${finalOutputFileName} (${(resultData.byteLength / 1024).toFixed(1)} KB)`);
 
     return {
       outputData: resultData,
       outputBlob,
-      outputFileName,
+      outputFileName: finalOutputFileName,
       outputSize: resultData.byteLength,
       mimeType: resultMime,
     };

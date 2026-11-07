@@ -1,5 +1,19 @@
 import { useState, useEffect, useMemo } from 'react';
-import { AlertCircle, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  AlertCircle,
+  Terminal,
+  ChevronDown,
+  ChevronUp,
+  ArrowRight,
+  RefreshCw,
+  X,
+  Film,
+  Music,
+  Image as ImageIcon,
+  FileText,
+  Archive,
+  File as FileIcon,
+} from 'lucide-react';
 import { UploadDropzone } from './UploadDropzone';
 import { FilePreview } from './FilePreview';
 import { SearchInput } from './SearchInput';
@@ -9,13 +23,22 @@ import { EngineSelector } from './EngineSelector';
 import { ConversionModifiersPanel } from './ConversionModifiersPanel';
 import { ConversionProgress } from './ConversionProgress';
 import { DownloadResult } from './DownloadResult';
-import { Button, Card, Typography } from '@/ui/components/core';
-import { FORMATS, describeFile, type Format } from '@/lib/formats';
+import { Button, Card, Typography, Badge } from '@/ui/components/core';
+import { FORMATS, describeFile, formatBytes, type Format, type Category } from '@/lib/formats';
 import { resolvePossibleConversions, resolveAvailableEngines, type EngineOption } from '@/modules/registry';
 import { WorkerManager } from '@/core/engine/WorkerManager';
 import { type ConversionModifiers, DEFAULT_CONVERSION_MODIFIERS } from '@/shared/types/conversionModifiers';
 import { probeMediaData, probeWithBrowser, type MediaProbeResult } from '@/core/media/mediaProbe';
 import { checkEngineCompatibility } from '@/modules/engineCapabilities';
+
+const categoryIcons: Record<Category, typeof FileIcon> = {
+  video: Film,
+  audio: Music,
+  image: ImageIcon,
+  document: FileText,
+  archive: Archive,
+  other: FileIcon,
+};
 
 type Status = 'idle' | 'converting' | 'done' | 'error';
 
@@ -32,6 +55,7 @@ export function ConvertPanel({
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
   const [selected, setSelected] = useState<string | null>(fixedTarget ?? null);
+  const [isChangingFormat, setIsChangingFormat] = useState(false);
   const [availableEngines, setAvailableEngines] = useState<EngineOption[]>([]);
   const [selectedEngineId, setSelectedEngineId] = useState<string | null>(null);
   const [conversionModifiers, setConversionModifiers] = useState<ConversionModifiers>(DEFAULT_CONVERSION_MODIFIERS);
@@ -180,6 +204,7 @@ export function ConvertPanel({
     setErrorMessage('');
     setFailedEngineName('');
     setSelectedEngineId(null);
+    setIsChangingFormat(false);
     setConversionModifiers(DEFAULT_CONVERSION_MODIFIERS);
     if (outputUrl) URL.revokeObjectURL(outputUrl);
     setOutputUrl(null);
@@ -268,12 +293,21 @@ export function ConvertPanel({
   const outputName =
     file && target ? file.name.replace(/\.[^.]+$/, '') + '.' + target.replace(/^\./, '').toLowerCase() : '';
 
+  const sourceDescription = file ? describeFile(file.name) : null;
+  const sourceCategory = sourceDescription?.category || 'other';
+  const SourceIcon = categoryIcons[sourceCategory];
+  const targetExtClean = target?.replace(/^\.+/, '').toUpperCase();
+  const targetFormatInfo = FORMATS.find((f) => f.ext === targetExtClean);
+  const targetCategory = targetFormatInfo?.category || 'other';
+  const TargetIcon = categoryIcons[targetCategory];
+
   if (!file) {
     return (
       <UploadDropzone
         onFile={(f) => {
           setFile(f);
           setSelectedEngineId(null);
+          setIsChangingFormat(false);
         }}
         accept={accept}
         hint={hint ?? 'Suporta dezenas de formatos populares'}
@@ -283,24 +317,110 @@ export function ConvertPanel({
 
   return (
     <div className="space-y-5">
-      <FilePreview file={file} onRemove={reset} />
+      {status === 'idle' && (
+        <>
+          {target && !isChangingFormat ? (
+            <section className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-3">
+                {/* Card Arquivo Original */}
+                <Card variant="raised" className="flex items-center gap-3 px-3.5 py-3 relative group">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-sm border border-border bg-surface text-muted-foreground">
+                    <SourceIcon className="size-4" strokeWidth={1.75} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Original</span>
+                      {sourceExt && <Badge variant="secondary" size="sm">.{sourceExt.toLowerCase()}</Badge>}
+                    </div>
+                    <Typography variant="body" className="truncate font-medium text-foreground">
+                      {file.name}
+                    </Typography>
+                    <Typography variant="code" color="muted" className="mt-0.5 block">
+                      {formatBytes(file.size)} · {sourceDescription?.kind}
+                    </Typography>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={reset}
+                    aria-label="Remover arquivo"
+                    className="ml-auto text-muted-foreground hover:text-foreground"
+                    title="Remover arquivo"
+                  >
+                    <X className="size-3.5" strokeWidth={1.75} />
+                  </Button>
+                </Card>
 
-      {status === 'idle' && !fixedTarget && (
-        <section className="space-y-3">
-          <Typography variant="h2" as="h2">
-            Converter para
-          </Typography>
-          <SearchInput value={query} onChange={setQuery} placeholder="Buscar formato..." />
-          <CategoryFilter value={category} onChange={setCategory} />
-          <FormatSelector
-            formats={availableFormats}
-            selected={selected}
-            onSelect={(ext) => {
-              setSelected(ext);
-              setSelectedEngineId(null);
-            }}
-          />
-        </section>
+                {/* Conector Central com Seta Indicadora */}
+                <div className="flex items-center justify-center py-1 md:py-0">
+                  <div className="flex size-8 items-center justify-center rounded-full border border-border bg-surface-raised text-primary shadow-xs">
+                    <ArrowRight className="size-4 md:rotate-0 rotate-90" strokeWidth={2} />
+                  </div>
+                </div>
+
+                {/* Card Arquivo Destino (Interativo para trocar formato) */}
+                <Card
+                  variant="interactive"
+                  className="flex items-center gap-3 px-3.5 py-3 cursor-pointer group hover:border-primary/50 relative border-dashed"
+                  onClick={() => setIsChangingFormat(true)}
+                  title="Clique para trocar para outro formato"
+                >
+                  <span className="grid size-9 shrink-0 place-items-center rounded-sm border border-primary/30 bg-primary/10 text-primary group-hover:scale-105 transition-transform">
+                    <TargetIcon className="size-4" strokeWidth={1.75} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-[11px] font-medium uppercase tracking-wider text-primary">Destino</span>
+                      <Badge variant="primary" size="sm">.{target.replace(/^\.+/, '').toLowerCase()}</Badge>
+                    </div>
+                    <Typography variant="body" className="truncate font-medium text-foreground group-hover:text-primary transition-colors">
+                      {outputName}
+                    </Typography>
+                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5 group-hover:text-foreground">
+                      <RefreshCw className="size-3" />
+                      <span>Clique para trocar formato</span>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            </section>
+          ) : (
+            <div className="space-y-5">
+              <FilePreview file={file} onRemove={reset} />
+
+              {!fixedTarget && (
+                <section className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Typography variant="h2" as="h2">
+                      Converter para
+                    </Typography>
+                    {target && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsChangingFormat(false)}
+                        className="text-xs"
+                      >
+                        Cancelar
+                      </Button>
+                    )}
+                  </div>
+                  <SearchInput value={query} onChange={setQuery} placeholder="Buscar formato..." />
+                  <CategoryFilter value={category} onChange={setCategory} />
+                  <FormatSelector
+                    formats={availableFormats}
+                    selected={selected}
+                    onSelect={(ext) => {
+                      setSelected(ext);
+                      setIsChangingFormat(false);
+                      setSelectedEngineId(null);
+                    }}
+                  />
+                </section>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {status === 'idle' && target && availableEngines.length > 0 && (

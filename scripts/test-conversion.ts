@@ -461,9 +461,9 @@ async function main() {
                 if (u8Data.byteLength < 10) {
                   return { success: false, error: 'ASSERTION FAILED: O arquivo PDF gerado está vazio.', logs: logs.slice(-6) };
                 }
-                // Verify %PDF- magic signature (0x25, 0x50, 0x44, 0x46, 0x2D)
+                // Verify %PDF- magic signature (0x25, 0x50, 0x44, 0x46)
                 if (u8Data[0] !== 0x25 || u8Data[1] !== 0x50 || u8Data[2] !== 0x44 || u8Data[3] !== 0x46) {
-                  return { success: false, error: 'ASSERTION FAILED: O arquivo gerado não possui a assinatura válida de cabeçalho PDF (%PDF-).', logs: logs.slice(-6) };
+                  return { success: false, error: 'ASSERTION FAILED: O arquivo gerado não possui a assinatura válida de cabeçalho PDF (%PDF).', logs: logs.slice(-6) };
                 }
                 // If pageRange '1' was requested, verify exactly 1 page
                 if (modifiers?.pageRange === '1') {
@@ -481,11 +481,42 @@ async function main() {
                 }
               }
 
-              // 4. Image Output Assertion (PNG)
-              if (toExt.toLowerCase() === 'png' && out) {
+              // 4. Magic Bytes Assertion (PNG, ZIP, JPG, OpenXML, EBML, MP4)
+              if (out) {
                 const u8Data = out.outputData || new Uint8Array(await (out.outputBlob as Blob).arrayBuffer());
-                if (u8Data.byteLength < 8 || u8Data[0] !== 0x89 || u8Data[1] !== 0x50 || u8Data[2] !== 0x4E || u8Data[3] !== 0x47) {
-                  return { success: false, error: 'ASSERTION FAILED: O arquivo PNG gerado não possui assinatura válida (0x89PNG).', logs: logs.slice(-6) };
+                const outName = (out.outputFileName as string) || '';
+                const cleanTo = toExt.toLowerCase();
+
+                if (outName.endsWith('.zip') || cleanTo === 'zip') {
+                  const isZip = u8Data.byteLength >= 4 && u8Data[0] === 0x50 && u8Data[1] === 0x4B && u8Data[2] === 0x03 && u8Data[3] === 0x04;
+                  if (!isZip) {
+                    return { success: false, error: 'ASSERTION FAILED: O arquivo ZIP gerado não possui assinatura válida (PK\\x03\\x04).', logs: logs.slice(-6) };
+                  }
+                } else if (cleanTo === 'png') {
+                  const isPng = u8Data.byteLength >= 8 && u8Data[0] === 0x89 && u8Data[1] === 0x50 && u8Data[2] === 0x4E && u8Data[3] === 0x47;
+                  if (!isPng) {
+                    return { success: false, error: 'ASSERTION FAILED: O arquivo PNG gerado não possui assinatura válida (\\x89PNG).', logs: logs.slice(-6) };
+                  }
+                } else if (cleanTo === 'jpg' || cleanTo === 'jpeg') {
+                  const isJpg = u8Data.byteLength >= 3 && u8Data[0] === 0xFF && u8Data[1] === 0xD8 && u8Data[2] === 0xFF;
+                  if (!isJpg) {
+                    return { success: false, error: 'ASSERTION FAILED: O arquivo JPEG gerado não possui assinatura válida (FF D8 FF).', logs: logs.slice(-6) };
+                  }
+                } else if (['docx', 'xlsx', 'pptx', 'odt', 'ods', 'odp'].includes(cleanTo)) {
+                  const isZipBased = u8Data.byteLength >= 4 && u8Data[0] === 0x50 && u8Data[1] === 0x4B && u8Data[2] === 0x03 && u8Data[3] === 0x04;
+                  if (!isZipBased) {
+                    return { success: false, error: `ASSERTION FAILED: Documento ${cleanTo.toUpperCase()} não possui assinatura OpenXML/ODF (PK\\x03\\x04).`, logs: logs.slice(-6) };
+                  }
+                } else if (cleanTo === 'mkv' || cleanTo === 'webm') {
+                  const isEbml = u8Data.byteLength >= 4 && u8Data[0] === 0x1A && u8Data[1] === 0x45 && u8Data[2] === 0xDF && u8Data[3] === 0xA3;
+                  if (!isEbml) {
+                    return { success: false, error: `ASSERTION FAILED: Arquivo ${cleanTo.toUpperCase()} não possui assinatura EBML válida (1A 45 DF A3).`, logs: logs.slice(-6) };
+                  }
+                } else if (['mp4', 'mov', 'm4a', 'm4v'].includes(cleanTo)) {
+                  const isIso = u8Data.byteLength >= 8 && u8Data[4] === 0x66 && u8Data[5] === 0x74 && u8Data[6] === 0x79 && u8Data[7] === 0x70;
+                  if (!isIso) {
+                    return { success: false, error: `ASSERTION FAILED: Arquivo ${cleanTo.toUpperCase()} não possui caixa ftyp ISO-BMFF válida.`, logs: logs.slice(-6) };
+                  }
                 }
               }
 

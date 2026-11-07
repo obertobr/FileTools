@@ -2,6 +2,11 @@ import { defineConfig } from 'astro/config';
 import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export default defineConfig({
   output: 'static',
@@ -13,14 +18,23 @@ export default defineConfig({
     },
   },
   vite: {
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src'),
+      },
+    },
     optimizeDeps: {
       exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
+    },
+    worker: {
+      format: 'es',
     },
     plugins: [
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
         workbox: {
+          maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,woff2}', 'index.html'],
           runtimeCaching: [
             {

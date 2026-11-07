@@ -393,17 +393,32 @@ O motor `libreoffice` (`src/modules/engines/libreoffice.ts`) integra a tecnologi
 3. **Pilar 2: Zero-RAM Streaming e Limpeza**:
    - As conversões utilizam buffers isolados do descritor de arquivo nativo e descartam imediatamente estruturas intermediárias após a gravação do arquivo de saída.
 
-### 15.2. Formatos e Capacidades Nativas Declaradas
-Em conformidade com o **Pilar 1 (Desacoplamento Canônico - Engines "Burras")**, o motor `libreoffice` executa estritamente as conversões nativas que o núcleo C++ do LibreOfficeKit suporta sem perda ou degradação artificial:
-1. **Writer (Processador de Texto)**:
-   - `doc`, `docx`, `odt`, `rtf`, `txt`, `html`, `htm`, `epub` -> `pdf`, `docx`, `doc`, `odt`, `rtf`, `txt`, `png`, `jpg`, `jpeg`, `webp`.
-2. **Calc (Planilhas)**:
-   - `xls`, `xlsx`, `ods`, `csv` -> `pdf`, `xlsx`, `xls`, `ods`, `csv`, `html`, `png`, `jpg`, `jpeg`, `webp`.
-3. **Impress (Apresentações)**:
-   - `ppt`, `pptx`, `odp` -> `pdf`, `pptx`, `ppt`, `odp`, `png`, `jpg`, `jpeg`, `webp`, `svg`.
-4. **Draw (Desenhos Vetoriais e Documentos PDF)**:
-   - `odg`, `pdf` -> `pdf`, `png`, `jpg`, `jpeg`, `webp`, `svg`.
-   - *Nota Arquitetural sobre PDF -> DOCX*: No núcleo do LibreOffice, arquivos PDF são importados exclusivamente no componente Draw, que não possui filtro de saída para formatos de texto (`docx`, `doc`, `odt`). Não são permitidas simulações ou pontes artificiais dentro do motor do LibreOffice. Futuramente, quando uma biblioteca especializada em reconstrução de layout ou extração de fluxo for incorporada, ela será introduzida como um motor independente e desacoplado.
+### 15.2. Formatos, Capacidades Nativas e Pureza de Motores
+Em estrita conformidade com o **Pilar 1 (Desacoplamento Canônico - Engines "Burras" e Zero Encadeamento Oculto)**:
+1. **Regra de Pureza de Motores (Proibido Encadeamento Oculto)**:
+   - Um motor individual (como `libreoffice.ts`) jamais deve invocar outro motor (como `magick.ts`) por baixo dos panos.
+   - O encadeamento de múltiplos motores será implementado como um recurso arquitetural de primeira classe na UI (com indicador visual de conversão multi-estágio, exibição do fluxo de estágios intermediários e progresso separado por etapa).
+2. **Capacidades Declaradas Nativas do LibreOffice WASM**:
+   - **Writer (Texto)**: `doc`, `docx`, `odt`, `rtf`, `txt`, `html`, `htm`, `epub` -> `pdf`, `docx`, `doc`, `odt`, `rtf`, `txt`, `html`, `png`.
+   - **Calc (Planilhas)**: `xls`, `xlsx`, `ods`, `csv` -> `pdf`, `xlsx`, `xls`, `ods`, `csv`, `html`, `png`.
+   - **Impress (Apresentações)**: `ppt`, `pptx`, `odp` -> `pdf`, `pptx`, `ppt`, `odp`, `png`, `svg`, `html`.
+   - **Draw (Desenhos Vetoriais e Documentos PDF)**: `odg`, `pdf` -> `pdf`, `png`, `svg`, `html`.
+   - *Nota Arquitetural sobre PDF -> DOCX*: No núcleo do LibreOffice, arquivos PDF são importados exclusivamente no componente Draw, que não possui filtro de saída para formatos de texto (`docx`, `doc`, `odt`). Não são permitidas simulações ou pontes artificiais dentro do motor do LibreOffice.
+3. **Tratamento de Documentos com Múltiplas Páginas para Imagem**:
+   - Quando o LibreOffice WASM exporta um documento de múltiplas páginas para `png`, ele gera cada página e as agrupa em um contêiner ZIP (`PK\x03\x04`).
+   - Se o usuário solicitar uma página específica via modificador (`pageRange: '1'` ou `pageIndex`), o motor extrai o PNG puro correspondente e entrega com assinatura `\x89PNG`.
+   - Se o usuário solicitar a conversão do documento completo, a saída é entregue como `.zip` (`application/zip`), garantindo que o sistema operacional abra normalmente sem alertar sobre arquivo corrompido.
+4. **Gerenciamento de Binários WASM Pesados e Git**:
+   - Binários maiores que 50MB/100MB (`soffice.wasm`, `soffice.data`) são ignorados no Git via `.gitignore`.
+   - Ao executar `npm install`, `npm run dev` ou `npm run build`, o script `scripts/setup-wasm.js` copia automaticamente os binários necessários do pacote `@matbee/libreoffice-converter` para `public/wasm/libreoffice/` de forma idempotente.
+5. **Asserção de Magic Bytes nos Testes**:
+   - O executor `scripts/test-conversion.ts` valida a assinatura binária real dos arquivos gerados (`verifyMagicBytes`):
+     - `PNG`: `89 50 4E 47` (`\x89PNG`)
+     - `PDF`: `25 50 44 46` (`%PDF`)
+     - `JPEG`: `FF D8 FF`
+     - `ZIP/DOCX/XLSX/PPTX/ODT`: `50 4B 03 04` (`PK\x03\x04`)
+     - `MKV/WEBM`: `1A 45 DF A3` (EBML)
+     - `MP4/MOV`: `ftyp` box (ISO-BMFF)
 
 ### 15.3. Modificadores de Documentos Suportados
 1. **Intervalo de Páginas (`page_range`)**:
@@ -413,6 +428,6 @@ Em conformidade com o **Pilar 1 (Desacoplamento Canônico - Engines "Burras")**,
    - Gera documentos em formato arquivístico padronizado (`pdfa-1b`, `pdfa-2b`, `pdfa-3b`).
    - Suportado no `libreoffice` via filtros nativos de exportação PDF.
 3. **Densidade de Renderização (`image_dpi`)**:
-   - Controla a resolução em DPI (72 a 600 DPI) para conversão de documentos em imagens (`png`, `jpg`, `webp`).
+   - Controla a resolução em DPI (72 a 600 DPI) para conversão de documentos em imagens (`png`, `svg`).
    - Suportado no `libreoffice` e no `@imagemagick/magick-wasm`.
 
