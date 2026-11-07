@@ -12,6 +12,9 @@ export default defineConfig({
   output: 'static',
   integrations: [react()],
   server: {
+    host: '0.0.0.0',
+    port: 4321,
+    allowedHosts: true,
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp',
@@ -72,6 +75,7 @@ export default defineConfig({
       }),
     ],
     server: {
+      allowedHosts: true,
       fs: {
         strict: false,
       },

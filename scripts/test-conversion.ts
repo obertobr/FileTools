@@ -1,12 +1,14 @@
 /**
  * scripts/test-conversion.ts
  *
- * Scoped CLI Runner with Delta Debugging for FileTools Conversions.
+ * Scoped CLI Runner with Deep 3-Layer Output Oracle, Delta Debugging (ddmin),
+ * and Production Fidelity (WorkerManager + native File + OPFS).
  *
  * Usage:
  *   npx tsx scripts/test-conversion.ts --from=mkv --to=webm
- *   npx tsx scripts/test-conversion.ts --from=mkv --engine=ffmpeg-core-mt
- *   npx tsx scripts/test-conversion.ts --from=mkv
+ *   npx tsx scripts/test-conversion.ts --from=ods --to=pdf --engine=libreoffice
+ *   npx tsx scripts/test-conversion.ts --from=csv --to=json --engine=sheetjs
+ *   npx tsx scripts/test-conversion.ts --engine=mediabunny
  *   npm run test:conversion -- --from=mkv --to=webm
  */
 
@@ -21,6 +23,12 @@ import {
   getApplicableModifierPool,
   combineModifierPatches,
 } from '../src/core/testing/deltaDebugger.ts';
+import type {
+  DDminResult,
+  FailureLayer,
+  ModifierPatch,
+  DiscoveredEngineBug,
+} from '../src/core/testing/types.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,6 +49,7 @@ interface CliArgs {
   quality?: string;
   allOptions: boolean;
   baseline: boolean;
+  summary: boolean;
 }
 
 function parseCliArgs(): CliArgs {
@@ -51,6 +60,7 @@ function parseCliArgs(): CliArgs {
     verbose: false,
     allOptions: false,
     baseline: false,
+    summary: true,
   };
 
   // Support both process.argv and npm_config_* environment variables
@@ -66,6 +76,7 @@ function parseCliArgs(): CliArgs {
   if (process.env.npm_config_all_options === 'true') options.allOptions = true;
   if (process.env.npm_config_verbose === 'true') options.verbose = true;
   if (process.env.npm_config_dd === 'false' || process.env.npm_config_no_dd === 'true') options.dd = false;
+  if (process.env.npm_config_summary === 'false') options.summary = false;
 
   for (const arg of args) {
     if (arg.startsWith('--from=')) options.from = arg.split('=')[1].toLowerCase().replace(/^\./, '');
@@ -84,6 +95,7 @@ function parseCliArgs(): CliArgs {
     else if (arg === '--no-dd') options.dd = false;
     else if (arg === '--all') options.all = true;
     else if (arg === '--verbose' || arg === '-v') options.verbose = true;
+    else if (arg === '--no-summary') options.summary = false;
   }
 
   return options;
@@ -93,6 +105,10 @@ function selectFixtureForExt(ext: string, customPath?: string): string {
   if (customPath && fs.existsSync(customPath)) return customPath;
 
   const clean = ext.toLowerCase().replace(/^\./, '');
+  if (clean === 'pdf') {
+    const multiPdf = path.join(projectRoot, 'tests', 'fixtures', 'sample_multipage.pdf');
+    if (fs.existsSync(multiPdf)) return multiPdf;
+  }
   const candidate = path.join(projectRoot, 'tests', 'fixtures', `sample.${clean}`);
   if (fs.existsSync(candidate)) return candidate;
 
@@ -103,14 +119,51 @@ function selectFixtureForExt(ext: string, customPath?: string): string {
   throw new Error(`Nenhum arquivo de teste encontrado para a extensão '.${clean}'`);
 }
 
+function formatLayerLabel(layer?: FailureLayer): string {
+  if (layer === 1) return 'Camada 1 (Magic Bytes)';
+  if (layer === 2) return 'Camada 2 (Decodificador)';
+  if (layer === 3) return 'Camada 3 (Auditoria)';
+  if (layer === 'EXECUTION') return 'Execução (Motor/Worker)';
+  return '-';
+}
+
+function createBugRecord(res: DDminResult): DiscoveredEngineBug {
+  const modSlug = res.minimalFailingModifiers?.[0]?.id ? `-${res.minimalFailingModifiers[0].id.toUpperCase()}` : '';
+  const id = `BUG-${res.engineId.toUpperCase()}-${res.from.toUpperCase()}-PARA-${res.to.toUpperCase()}${modSlug}`;
+
+  let repCmd = `npx tsx scripts/test-conversion.ts --from=${res.from} --to=${res.to} --engine=${res.engineId}`;
+  if (res.status === 'FAIL_BASELINE') {
+    repCmd += ' --baseline';
+  } else if (res.status === 'FAIL_SINGLETON' && res.minimalFailingModifiers?.[0]) {
+    repCmd += ` --all-options # Isolado: ${res.minimalFailingModifiers[0].id}`;
+  }
+
+  const firstErrorLine = res.error?.split('\n')[0] || 'Falha desconhecida';
+
+  return {
+    id,
+    engineId: res.engineId,
+    from: res.from,
+    to: res.to,
+    status: res.status,
+    failedLayer: res.failedLayer || (res.status === 'FAIL_BASELINE' ? 'EXECUTION' : 1),
+    oracleResult: res.oracleResult,
+    minimalFailingModifiers: res.minimalFailingModifiers,
+    error: res.error || 'Sem mensagem de erro disponível',
+    reproductionCommand: repCmd,
+    logs: res.logs,
+  };
+}
+
 async function main() {
   const options = parseCliArgs();
 
-  console.log('\n======================================================');
-  console.log('   FileTools - Delta Debugging Conversion Test Runner  ');
-  console.log('======================================================\n');
+  console.log('\n========================================================================');
+  console.log('   FileTools - Sistema Avançado de Testes de Conversão em Produção     ');
+  console.log('   Oráculo em 3 Camadas (Bytes / Decodificador / Auditoria de Efeito)   ');
+  console.log('========================================================================\n');
   console.log(`Filtros: from=${options.from || '*'} | to=${options.to || '*'} | engine=${options.engine || '*'}`);
-  console.log(`Delta Debugging: ${options.dd ? 'ATIVO (ddmin)' : 'DESATIVADO'}\n`);
+  console.log(`Modo: ${options.baseline ? 'Baseline Único' : (options.allOptions ? 'Estresse Total' : (options.dd ? 'Delta Debugging (ddmin)' : 'Execução Direta'))}\n`);
 
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
@@ -135,24 +188,42 @@ async function main() {
   });
 
   // Get matching conversion pairs and manifests inside browser
-  const plan = await page.evaluate(({ fromFilter, toFilter, engineFilter, isAll }) => {
+  const plan = await page.evaluate(({ fromFilter, toFilter, engineFilter }) => {
     return (async () => {
       const reg = await import('/src/modules/registry.ts');
       const convLib = await import('/src/lib/converters.ts');
+      const fmtLib = await import('/src/lib/formats.ts');
       const manifests = reg.getAllManifests();
 
       let candidateConversions: { from: string; to: string; engineId?: string }[] = [];
 
-      // If a specific engine was targeted, discover ALL conversions that this engine declares in supportedConversions!
+      // Helper to expand wildcard rules like 'video/*' or 'audio/*'
+      const expandRuleTokens = (tokens: string[]): string[] => {
+        const expanded: string[] = [];
+        for (const tok of tokens) {
+          if (tok.endsWith('/*')) {
+            const cat = tok.split('/')[0].toLowerCase();
+            const catExts = (fmtLib.FORMATS || [])
+              .filter((f: any) => f.category === cat)
+              .map((f: any) => f.ext.toLowerCase());
+            expanded.push(...catExts);
+          } else {
+            expanded.push(tok.toLowerCase().replace(/^\./, ''));
+          }
+        }
+        return expanded;
+      };
+
+      // If a specific engine was targeted, discover ALL conversions that this engine declares in supportedConversions
       if (engineFilter) {
         const targetManifest = manifests.find((m) => m.id === engineFilter);
         if (targetManifest && targetManifest.supportedConversions) {
           const pairs: { from: string; to: string; engineId: string }[] = [];
           for (const rule of targetManifest.supportedConversions) {
-            for (const f of rule.from) {
-              for (const t of rule.to) {
-                const cFrom = f.toLowerCase().replace(/^\./, '');
-                const cTo = t.toLowerCase().replace(/^\./, '');
+            const fromList = expandRuleTokens(rule.from);
+            const toList = expandRuleTokens(rule.to);
+            for (const cFrom of fromList) {
+              for (const cTo of toList) {
                 const matchFrom = !fromFilter || cFrom === fromFilter;
                 const matchTo = !toFilter || cTo === toFilter;
                 if (matchFrom && matchTo && (cFrom !== cTo || Boolean(fromFilter && toFilter))) {
@@ -171,15 +242,15 @@ async function main() {
         }
       }
 
-      // Fallback to global converter catalog
-      if (candidateConversions.length === 0) {
+      // Fallback to global converter catalog ONLY when no specific engine was filtered
+      if (!engineFilter && candidateConversions.length === 0) {
         const allConvs = convLib.CONVERTERS || [];
         const filtered = allConvs.filter((c: any) => {
           const matchFrom = !fromFilter || c.from.toLowerCase() === fromFilter;
           const matchTo = !toFilter || c.to.toLowerCase() === toFilter;
           return matchFrom && matchTo;
         });
-        
+
         for (const c of filtered) {
           const engines = await reg.resolveAvailableEngines(c.from, c.to);
           candidateConversions.push({
@@ -203,7 +274,6 @@ async function main() {
     fromFilter: options.from,
     toFilter: options.to,
     engineFilter: options.engine,
-    isAll: options.all,
   });
 
   // Filter conversions to only those where a valid test fixture exists
@@ -222,7 +292,8 @@ async function main() {
   plan.conversions = runnableConversions;
   console.log(`Total de pares encontrados para teste: ${plan.conversions.length}\n`);
 
-  const results = [];
+  const results: DDminResult[] = [];
+  const discoveredBugs: DiscoveredEngineBug[] = [];
 
   for (const conv of plan.conversions) {
     const fixturePath = selectFixtureForExt(conv.from, options.file);
@@ -232,10 +303,9 @@ async function main() {
     const targetEngine = options.engine || conv.engineId || 'ffmpeg-core-mt';
     process.stdout.write(`• Testando [${conv.from.toUpperCase()} -> ${conv.to.toUpperCase()}] (${targetEngine})... `);
 
-    let ddResult: any;
+    let ddResult: DDminResult;
     let lastFrameTime = 0;
     let startedEncoding = false;
-    let isStalled = false;
     let stallInterval: NodeJS.Timeout | null = null;
     let overallTimer: NodeJS.Timeout | null = null;
 
@@ -319,8 +389,9 @@ async function main() {
         });
       }
 
+      // Execute conversion via the Production Runner inside the browser
       const execute = async (modifiers: any, stageLabel?: string) => {
-        if (stageLabel) {
+        if (stageLabel && options.verbose) {
           console.log(`\n  [DDmin] ${stageLabel}`);
         }
         try {
@@ -331,11 +402,7 @@ async function main() {
             engineId,
             modifiers,
           }) => {
-            const { ModuleRegistry } = await import('/src/modules/registry.ts');
-            const moduleInstance = ModuleRegistry[engineId];
-            if (!moduleInstance) {
-              return { success: false, error: `Motor '${engineId}' não encontrado no ModuleRegistry.`, logs: [] };
-            }
+            const { runProductionConversion } = await import('/src/core/testing/productionRunner.ts');
 
             const binStr = atob(fileBase64);
             const u8 = new Uint8Array(binStr.length);
@@ -343,187 +410,29 @@ async function main() {
               u8[i] = binStr.charCodeAt(i);
             }
 
-            const logs: string[] = [];
-            try {
-              const out = await moduleInstance.execute(
-                {
-                  fileData: u8,
-                  originalName,
-                  targetFormat: '.' + toExt,
-                  modifiers,
-                },
-                {
-                  onProgress: (p, msg) => {
-                    if (msg) console.log(`[Progress ${p}%] ${msg}`);
-                  },
-                  onLog: (m: string) => {
-                    logs.push(m);
-                    console.log(m);
-                  },
-                  workspacePath: '/workspace',
-                }
-              );
-              const ok = Boolean(out && (out.outputBlob || (out.outputData && out.outputData.byteLength > 0)));
-              if (!ok) {
-                return { success: false, error: 'O motor não gerou nenhum dado de saída (buffer/blob vazio).', logs: logs.slice(-6) };
-              }
+            const res = await runProductionConversion({
+              fileData: u8,
+              originalName,
+              toExt,
+              engineId,
+              modifiers,
+              onProgress: (p, msg) => {
+                if (msg) console.log(`[Progress ${p}%] ${msg}`);
+              },
+              onLog: (m: string) => {
+                console.log(m);
+              },
+            });
 
-              // Post-conversion assertion: verify applied modifiers took effect!
-              const isVideoOutput = ['mp4', 'webm', 'mkv', 'mov', 'avi', 'ts', '3gp', 'm4v'].includes(toExt.toLowerCase());
-              if (isVideoOutput && out) {
-                const blob = out.outputBlob instanceof Blob
-                  ? out.outputBlob
-                  : new Blob([out.outputData!], { type: out.mimeType || 'video/mp4' });
-
-                // 1. Check resolution if targetWidth or resolutionScale was requested
-                let expectedWidth = modifiers?.targetWidth;
-                if (!expectedWidth && modifiers?.customScaleWidth) {
-                  expectedWidth = modifiers.customScaleWidth;
-                }
-                if (!expectedWidth && modifiers?.resolutionScale && modifiers.resolutionScale !== 'original') {
-                  const scaleMap: Record<string, number> = {
-                    '1080p': 1920,
-                    '720p': 1280,
-                    '480p': 854,
-                    '360p': 640,
-                    '320p': 480,
-                    'cif': 352,
-                    'qcif': 176,
-                  };
-                  expectedWidth = scaleMap[modifiers.resolutionScale.toLowerCase()];
-                }
-
-                if (expectedWidth && expectedWidth > 0) {
-                  let probedWidth: number | undefined;
-                  let probedHeight: number | undefined;
-
-                  try {
-                    const { probeMediaData } = await import('/src/core/media/mediaProbe.ts');
-                    const u8Data = out.outputData || new Uint8Array(await blob.arrayBuffer());
-                    const probe = probeMediaData(u8Data);
-                    if (probe && probe.width) {
-                      probedWidth = probe.width;
-                      probedHeight = probe.height;
-                    }
-                  } catch {}
-
-                  // Also check HTML5 video element in browser DOM
-                  try {
-                    const url = URL.createObjectURL(blob);
-                    const vid = document.createElement('video');
-                    vid.preload = 'metadata';
-                    vid.src = url;
-                    await new Promise<void>((resolve) => {
-                      const tm = setTimeout(() => resolve(), 3500);
-                      vid.onloadedmetadata = () => {
-                        clearTimeout(tm);
-                        if (vid.videoWidth) {
-                          probedWidth = vid.videoWidth;
-                          probedHeight = vid.videoHeight;
-                        }
-                        resolve();
-                      };
-                      vid.onerror = () => resolve();
-                    });
-                    URL.revokeObjectURL(url);
-                  } catch {}
-
-                  if (probedWidth !== undefined && Math.abs(probedWidth - expectedWidth) > 2) {
-                    return {
-                      success: false,
-                      error: `ASSERTION FAILED: A resolução do vídeo gerado (${probedWidth}x${probedHeight}) não corresponde à solicitada (${expectedWidth}px)! O motor ignorou o modificador de escala ou manteve a resolução original.`,
-                      logs: logs.slice(-6),
-                    };
-                  }
-                }
-
-                // 2. Check FPS if requested
-                const expectedFps = modifiers?.targetFps || modifiers?.customFps;
-                if (expectedFps && expectedFps > 0 && modifiers?.isCustomFps) {
-                  try {
-                    const { probeMediaData } = await import('/src/core/media/mediaProbe.ts');
-                    const u8Data = out.outputData || new Uint8Array(await blob.arrayBuffer());
-                    const probe = probeMediaData(u8Data);
-                    if (probe && probe.fps && Math.abs(probe.fps - expectedFps) > 1) {
-                      return {
-                        success: false,
-                        error: `ASSERTION FAILED: A taxa de quadros do vídeo gerado (${probe.fps} fps) não corresponde à solicitada (${expectedFps} fps)!`,
-                        logs: logs.slice(-6),
-                      };
-                    }
-                  } catch {}
-                }
-              }
-
-              // 3. Document / PDF Output Assertion
-              if (toExt.toLowerCase() === 'pdf' && out) {
-                const u8Data = out.outputData || new Uint8Array(await (out.outputBlob as Blob).arrayBuffer());
-                if (u8Data.byteLength < 10) {
-                  return { success: false, error: 'ASSERTION FAILED: O arquivo PDF gerado está vazio.', logs: logs.slice(-6) };
-                }
-                // Verify %PDF- magic signature (0x25, 0x50, 0x44, 0x46)
-                if (u8Data[0] !== 0x25 || u8Data[1] !== 0x50 || u8Data[2] !== 0x44 || u8Data[3] !== 0x46) {
-                  return { success: false, error: 'ASSERTION FAILED: O arquivo gerado não possui a assinatura válida de cabeçalho PDF (%PDF).', logs: logs.slice(-6) };
-                }
-                // If pageRange '1' was requested, verify exactly 1 page
-                if (modifiers?.pageRange === '1') {
-                  try {
-                    const { PDFDocument } = await import('pdf-lib');
-                    const pdfDoc = await PDFDocument.load(u8Data, { ignoreEncryption: true });
-                    if (pdfDoc.getPageCount() !== 1) {
-                      return {
-                        success: false,
-                        error: `ASSERTION FAILED: O PDF gerado tem ${pdfDoc.getPageCount()} páginas, mas o modificador solicitava apenas a primeira página (1).`,
-                        logs: logs.slice(-6),
-                      };
-                    }
-                  } catch {}
-                }
-              }
-
-              // 4. Magic Bytes Assertion (PNG, ZIP, JPG, OpenXML, EBML, MP4)
-              if (out) {
-                const u8Data = out.outputData || new Uint8Array(await (out.outputBlob as Blob).arrayBuffer());
-                const outName = (out.outputFileName as string) || '';
-                const cleanTo = toExt.toLowerCase();
-
-                if (outName.endsWith('.zip') || cleanTo === 'zip') {
-                  const isZip = u8Data.byteLength >= 4 && u8Data[0] === 0x50 && u8Data[1] === 0x4B && u8Data[2] === 0x03 && u8Data[3] === 0x04;
-                  if (!isZip) {
-                    return { success: false, error: 'ASSERTION FAILED: O arquivo ZIP gerado não possui assinatura válida (PK\\x03\\x04).', logs: logs.slice(-6) };
-                  }
-                } else if (cleanTo === 'png') {
-                  const isPng = u8Data.byteLength >= 8 && u8Data[0] === 0x89 && u8Data[1] === 0x50 && u8Data[2] === 0x4E && u8Data[3] === 0x47;
-                  if (!isPng) {
-                    return { success: false, error: 'ASSERTION FAILED: O arquivo PNG gerado não possui assinatura válida (\\x89PNG).', logs: logs.slice(-6) };
-                  }
-                } else if (cleanTo === 'jpg' || cleanTo === 'jpeg') {
-                  const isJpg = u8Data.byteLength >= 3 && u8Data[0] === 0xFF && u8Data[1] === 0xD8 && u8Data[2] === 0xFF;
-                  if (!isJpg) {
-                    return { success: false, error: 'ASSERTION FAILED: O arquivo JPEG gerado não possui assinatura válida (FF D8 FF).', logs: logs.slice(-6) };
-                  }
-                } else if (['docx', 'xlsx', 'pptx', 'odt', 'ods', 'odp'].includes(cleanTo)) {
-                  const isZipBased = u8Data.byteLength >= 4 && u8Data[0] === 0x50 && u8Data[1] === 0x4B && u8Data[2] === 0x03 && u8Data[3] === 0x04;
-                  if (!isZipBased) {
-                    return { success: false, error: `ASSERTION FAILED: Documento ${cleanTo.toUpperCase()} não possui assinatura OpenXML/ODF (PK\\x03\\x04).`, logs: logs.slice(-6) };
-                  }
-                } else if (cleanTo === 'mkv' || cleanTo === 'webm') {
-                  const isEbml = u8Data.byteLength >= 4 && u8Data[0] === 0x1A && u8Data[1] === 0x45 && u8Data[2] === 0xDF && u8Data[3] === 0xA3;
-                  if (!isEbml) {
-                    return { success: false, error: `ASSERTION FAILED: Arquivo ${cleanTo.toUpperCase()} não possui assinatura EBML válida (1A 45 DF A3).`, logs: logs.slice(-6) };
-                  }
-                } else if (['mp4', 'mov', 'm4a', 'm4v'].includes(cleanTo)) {
-                  const isIso = u8Data.byteLength >= 8 && u8Data[4] === 0x66 && u8Data[5] === 0x74 && u8Data[6] === 0x79 && u8Data[7] === 0x70;
-                  if (!isIso) {
-                    return { success: false, error: `ASSERTION FAILED: Arquivo ${cleanTo.toUpperCase()} não possui caixa ftyp ISO-BMFF válida.`, logs: logs.slice(-6) };
-                  }
-                }
-              }
-
-              return { success: true, logs: logs.slice(-6) };
-            } catch (err) {
-              return { success: false, error: String(err), logs: logs.slice(-6) };
-            }
+            return {
+              success: res.success,
+              failedLayer: res.failedLayer,
+              oracleResult: res.oracleResult,
+              error: res.error,
+              logs: res.logs,
+              outputSize: res.outputSize,
+              mimeType: res.mimeType,
+            };
           }, {
             fileBase64,
             originalName,
@@ -532,12 +441,17 @@ async function main() {
             modifiers,
           });
         } catch (err: any) {
-          return { success: false, error: String(err?.message || err), logs: [] };
+          return {
+            success: false,
+            failedLayer: 'EXECUTION' as const,
+            error: String(err?.message || err),
+            logs: [],
+          };
         }
       };
 
       const t0 = Date.now();
-      let executionPromise: Promise<any>;
+      let executionPromise: Promise<DDminResult>;
 
       if (options.baseline) {
         executionPromise = (async () => {
@@ -555,6 +469,8 @@ async function main() {
             iterations: 1,
             maximalPassed: false,
             baselinePassed: res.success,
+            failedLayer: res.failedLayer,
+            oracleResult: res.oracleResult,
             error: res.error,
             logs: res.logs,
             durationMs: Date.now() - t0,
@@ -571,6 +487,9 @@ async function main() {
             status: res.success ? 'PASS' : 'FAIL_BASELINE',
             iterations: 1,
             maximalPassed: res.success,
+            baselinePassed: res.success,
+            failedLayer: res.failedLayer,
+            oracleResult: res.oracleResult,
             error: res.error,
             logs: res.logs,
             durationMs: Date.now() - t0,
@@ -581,18 +500,17 @@ async function main() {
       }
 
       // Stall Watchdog in Node.js (10s threshold for heavy moov atom relocation)
-      const stallPromise = new Promise((_, reject) => {
+      const stallPromise = new Promise<never>((_, reject) => {
         stallInterval = setInterval(() => {
           if (startedEncoding && lastFrameTime > 0 && Date.now() - lastFrameTime > 10_000) {
-            isStalled = true;
             if (stallInterval) clearInterval(stallInterval);
-            reject(new Error('ESTAGNAÇÃO DE QUADROS (STALL): Motor FFmpeg travou sem emitir frames ou progresso por mais de 10 segundos.'));
+            reject(new Error('ESTAGNAÇÃO DE QUADROS (STALL): Motor travou sem emitir frames ou progresso por mais de 10 segundos.'));
           }
         }, 500);
       });
 
       // Overall hard timeout (120 seconds, unref'd so it doesn't block process exit)
-      const overallTimeoutPromise = new Promise((_, reject) => {
+      const overallTimeoutPromise = new Promise<never>((_, reject) => {
         overallTimer = setTimeout(() => {
           reject(new Error('TIMEOUT TOTAL EXCEDIDO (120s): A conversão não completou no tempo limite.'));
         }, 120_000);
@@ -613,6 +531,7 @@ async function main() {
         iterations: 1,
         maximalPassed: false,
         baselinePassed: false,
+        failedLayer: 'EXECUTION',
         error: String(err?.message || err),
         durationMs: 6000,
       };
@@ -626,39 +545,107 @@ async function main() {
 
     if (ddResult.status === 'PASS') {
       console.log(`✅ PASS (${ddResult.iterations} iteração, ${(ddResult.durationMs / 1000).toFixed(1)}s)`);
-    } else if (ddResult.status === 'FAIL_BASELINE') {
-      console.log(`🚨 FAIL NO BASELINE! (${ddResult.iterations} iterações)`);
-      console.log(`     Erro: ${ddResult.error}`);
-      if (ddResult.logs && ddResult.logs.length > 0) {
-        console.log(`     Logs: ${ddResult.logs.join(' | ')}`);
-      }
-    } else if (ddResult.status === 'FAIL_SINGLETON') {
-      const mod = ddResult.minimalFailingModifiers?.[0];
-      console.log(`🎯 FALHA ISOLADA no modificador '${mod?.id}'! (${ddResult.iterations} iterações)`);
-      console.log(`     Modificador: ${mod?.description}`);
-      console.log(`     Erro: ${ddResult.error}`);
-      if (ddResult.logs && ddResult.logs.length > 0) {
-        console.log(`     Logs: ${ddResult.logs.join(' | ')}`);
-      }
-    } else if (ddResult.status === 'FAIL_INTERACTION') {
-      const ids = ddResult.minimalFailingModifiers?.map((m: any) => m.id).join(' + ');
-      console.log(`🎯 INTERAÇÃO CONFLITANTE isolada: [${ids}]! (${ddResult.iterations} iterações)`);
-      console.log(`     Erro: ${ddResult.error}`);
-      if (ddResult.logs && ddResult.logs.length > 0) {
-        console.log(`     Logs: ${ddResult.logs.join(' | ')}`);
+    } else {
+      const bug = createBugRecord(ddResult);
+      discoveredBugs.push(bug);
+
+      const layerLabel = formatLayerLabel(ddResult.failedLayer);
+
+      if (ddResult.status === 'FAIL_BASELINE') {
+        console.log(`🚨 FAIL NO BASELINE! (${ddResult.iterations} iterações, ${layerLabel})`);
+        console.log(`     Erro: ${ddResult.error}`);
+        if (ddResult.logs && ddResult.logs.length > 0 && options.verbose) {
+          console.log(`     Logs: ${ddResult.logs.slice(-3).join(' | ')}`);
+        }
+      } else if (ddResult.status === 'FAIL_SINGLETON') {
+        const mod = ddResult.minimalFailingModifiers?.[0];
+        console.log(`🎯 FALHA ISOLADA no modificador '${mod?.id}'! (${ddResult.iterations} iterações, ${layerLabel})`);
+        console.log(`     Modificador: ${mod?.description}`);
+        console.log(`     Erro: ${ddResult.error}`);
+        if (ddResult.logs && ddResult.logs.length > 0 && options.verbose) {
+          console.log(`     Logs: ${ddResult.logs.slice(-3).join(' | ')}`);
+        }
+      } else if (ddResult.status === 'FAIL_INTERACTION') {
+        const ids = ddResult.minimalFailingModifiers?.map((m: any) => m.id).join(' + ');
+        console.log(`🎯 INTERAÇÃO CONFLITANTE isolada: [${ids}]! (${ddResult.iterations} iterações, ${layerLabel})`);
+        console.log(`     Erro: ${ddResult.error}`);
+        if (ddResult.logs && ddResult.logs.length > 0 && options.verbose) {
+          console.log(`     Logs: ${ddResult.logs.slice(-3).join(' | ')}`);
+        }
       }
     }
   }
 
   await browser.close();
 
-  // Summary
+  // Summary Table
   const passed = results.filter((r) => r.status === 'PASS').length;
   const failed = results.length - passed;
 
-  console.log('\n======================================================');
-  console.log(`   Resumo dos Testes: ${passed} Aprovados, ${failed} Falhas (${results.length} total)`);
-  console.log('======================================================\n');
+  if (options.summary) {
+    console.log('\n=============================================================================================================');
+    console.log('                                  TABELA GERAL DE RESULTADOS DE CONVERSÃO                                    ');
+    console.log('=============================================================================================================');
+    console.log(
+      '| ' +
+      'Par de Conversão'.padEnd(18) + ' | ' +
+      'Motor'.padEnd(16) + ' | ' +
+      'Status'.padEnd(16) + ' | ' +
+      'Camada Falha'.padEnd(25) + ' | ' +
+      'Iter'.padEnd(4) + ' | ' +
+      'Duração'.padEnd(8) + ' | ' +
+      'Diagnóstico / Causa Raiz'
+    );
+    console.log('|' + '-'.repeat(20) + '|' + '-'.repeat(18) + '|' + '-'.repeat(18) + '|' + '-'.repeat(27) + '|' + '-'.repeat(6) + '|' + '-'.repeat(10) + '|' + '-'.repeat(30));
+
+    for (const r of results) {
+      const pair = `${r.from.toUpperCase()} -> ${r.to.toUpperCase()}`;
+      const statusStr = r.status === 'PASS' ? '✅ PASS' : (r.status === 'FAIL_BASELINE' ? '🚨 BASELINE' : (r.status === 'FAIL_SINGLETON' ? '🎯 SINGLETON' : '🎯 INTERACT'));
+      const layerStr = formatLayerLabel(r.failedLayer);
+      const durStr = `${(r.durationMs / 1000).toFixed(1)}s`;
+      const diagStr = r.status === 'PASS'
+        ? 'Aprovado em todas as 3 camadas'
+        : (r.error ? r.error.replace(/\r?\n/g, ' ').slice(0, 50) + '...' : 'Falha');
+
+      console.log(
+        '| ' +
+        pair.padEnd(18) + ' | ' +
+        r.engineId.padEnd(16) + ' | ' +
+        statusStr.padEnd(16) + ' | ' +
+        layerStr.padEnd(25) + ' | ' +
+        String(r.iterations).padEnd(4) + ' | ' +
+        durStr.padEnd(8) + ' | ' +
+        diagStr
+      );
+    }
+    console.log('=============================================================================================================\n');
+
+    // Discovered Engine Bugs Section
+    if (discoveredBugs.length > 0) {
+      console.log('=============================================================================================================');
+      console.log('                         CATÁLOGO DETALHADO DE BUGS ENCONTRADOS NOS MOTORES                                 ');
+      console.log('=============================================================================================================');
+
+      discoveredBugs.forEach((bug, idx) => {
+        console.log(`\n[BUG #${idx + 1}] ${bug.id}`);
+        console.log(`  • Motor: ${bug.engineId}`);
+        console.log(`  • Conversão: .${bug.from} -> .${bug.to}`);
+        console.log(`  • Classificação: ${bug.status}`);
+        console.log(`  • Camada de Detecção: ${formatLayerLabel(bug.failedLayer)}`);
+        if (bug.minimalFailingModifiers && bug.minimalFailingModifiers.length > 0) {
+          const modNames = bug.minimalFailingModifiers.map((m) => `'${m.id}' (${m.description})`).join(', ');
+          console.log(`  • Modificador(es) Culpado(s): ${modNames}`);
+        }
+        console.log(`  • Diagnóstico do Oráculo:`);
+        console.log(`      ${bug.error.split('\n').join('\n      ')}`);
+        console.log(`  • Comando para Reprodução Rápida:`);
+        console.log(`      ${bug.reproductionCommand}`);
+      });
+      console.log('\n=============================================================================================================\n');
+    }
+  }
+
+  console.log(`Resumo: ${passed} Aprovados, ${failed} Falhas (${results.length} total executados)`);
 
   if (failed > 0) {
     process.exit(1);

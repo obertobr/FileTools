@@ -15,26 +15,14 @@ import type {
 } from '@/shared/types/conversionModifiers';
 import { categoryOfExtension } from '@/lib/formats';
 import type { ModuleManifest } from '@/shared/types/module';
+import type {
+  ModifierPatch,
+  DDminResult,
+  FailureLayer,
+  OracleValidationResult,
+} from './types';
 
-export interface ModifierPatch {
-  id: ModifierCategoryId;
-  description: string;
-  patch: Partial<ConversionModifiers>;
-}
-
-export interface DDminResult {
-  from: string;
-  to: string;
-  engineId: string;
-  status: 'PASS' | 'FAIL_BASELINE' | 'FAIL_SINGLETON' | 'FAIL_INTERACTION';
-  iterations: number;
-  maximalPassed: boolean;
-  baselinePassed?: boolean;
-  minimalFailingModifiers?: ModifierPatch[];
-  error?: string;
-  logs?: string[];
-  durationMs: number;
-}
+export type { ModifierPatch, DDminResult, FailureLayer };
 
 /**
  * Combines an array of modifier patches into a full ConversionModifiers object.
@@ -297,6 +285,8 @@ export async function runDeltaDebugging(
     success: boolean;
     error?: string;
     logs?: string[];
+    failedLayer?: FailureLayer;
+    oracleResult?: OracleValidationResult;
   }>
 ): Promise<DDminResult> {
   const startTime = Date.now();
@@ -320,6 +310,7 @@ export async function runDeltaDebugging(
         iterations,
         maximalPassed: true,
         baselinePassed: true,
+        oracleResult: maxRes.oracleResult,
         durationMs: Date.now() - startTime,
       };
     }
@@ -346,6 +337,7 @@ export async function runDeltaDebugging(
         iterations,
         maximalPassed: true,
         baselinePassed: true,
+        oracleResult: baseRes.oracleResult,
         durationMs: Date.now() - startTime,
       };
     }
@@ -358,6 +350,8 @@ export async function runDeltaDebugging(
       iterations,
       maximalPassed: true,
       baselinePassed: false,
+      failedLayer: baseRes.failedLayer,
+      oracleResult: baseRes.oracleResult,
       error: baseRes.error || 'Falha na conversão padrão (Baseline sem modificadores).',
       logs: baseRes.logs,
       durationMs: Date.now() - startTime,
@@ -367,6 +361,8 @@ export async function runDeltaDebugging(
   // 2. Stage 2: If Maximal Modifiers failed, test Baseline to differentiate engine failure vs modifier bug
   const initialError = maxRes.error;
   const initialLogs = maxRes.logs;
+  const initialLayer = maxRes.failedLayer;
+  const initialOracle = maxRes.oracleResult;
 
   iterations++;
   const baselineModifiers: ConversionModifiers = {
@@ -389,6 +385,8 @@ export async function runDeltaDebugging(
       iterations,
       maximalPassed: false,
       baselinePassed: false,
+      failedLayer: baseRes.failedLayer || initialLayer,
+      oracleResult: baseRes.oracleResult || initialOracle,
       error: baseRes.error || initialError || 'Falha na conversão padrão (Baseline sem modificadores).',
       logs: baseRes.logs || initialLogs,
       durationMs: Date.now() - startTime,
@@ -411,6 +409,8 @@ export async function runDeltaDebugging(
         maximalPassed: false,
         baselinePassed: true,
         minimalFailingModifiers: [mod],
+        failedLayer: singleRes.failedLayer || initialLayer,
+        oracleResult: singleRes.oracleResult || initialOracle,
         error: singleRes.error || initialError,
         logs: singleRes.logs || initialLogs,
         durationMs: Date.now() - startTime,
@@ -423,6 +423,8 @@ export async function runDeltaDebugging(
   let n = 2;
   let lastError = initialError;
   let lastLogs = initialLogs;
+  let lastLayer = initialLayer;
+  let lastOracle = initialOracle;
 
   while (currentSet.length >= 2) {
     const subsetSize = Math.ceil(currentSet.length / n);
@@ -443,6 +445,8 @@ export async function runDeltaDebugging(
         reduced = true;
         lastError = res.error;
         lastLogs = res.logs;
+        lastLayer = res.failedLayer;
+        lastOracle = res.oracleResult;
         break;
       }
     }
@@ -461,6 +465,8 @@ export async function runDeltaDebugging(
           reduced = true;
           lastError = res.error;
           lastLogs = res.logs;
+          lastLayer = res.failedLayer;
+          lastOracle = res.oracleResult;
           break;
         }
       }
@@ -484,6 +490,8 @@ export async function runDeltaDebugging(
     maximalPassed: false,
     baselinePassed: true,
     minimalFailingModifiers: currentSet,
+    failedLayer: lastLayer,
+    oracleResult: lastOracle,
     error: lastError,
     logs: lastLogs,
     durationMs: Date.now() - startTime,
