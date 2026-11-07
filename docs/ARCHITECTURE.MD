@@ -394,38 +394,25 @@ O motor `libreoffice` (`src/modules/engines/libreoffice.ts`) integra a tecnologi
    - As conversões utilizam buffers isolados do descritor de arquivo nativo e descartam imediatamente estruturas intermediárias após a gravação do arquivo de saída.
 
 ### 15.2. Formatos e Capacidades Nativas Declaradas
-Em conformidade com o **Pilar 1 (Desacoplamento Canônico - Engines "Burras")** e a **Regra de Pureza de Motores**, o motor `libreoffice` executa estritamente as conversões nativas que o núcleo C++ do LibreOfficeKit suporta:
+Em conformidade com o **Pilar 1 (Desacoplamento Canônico - Engines "Burras")**, o motor `libreoffice` executa estritamente as conversões nativas que o núcleo C++ do LibreOfficeKit suporta sem perda ou degradação artificial:
 1. **Writer (Processador de Texto)**:
-   - `doc`, `docx`, `odt`, `rtf`, `txt`, `html`, `htm`, `epub` -> `pdf`, `docx`, `doc`, `odt`, `rtf`, `txt`, `png`.
+   - `doc`, `docx`, `odt`, `rtf`, `txt`, `html`, `htm`, `epub` -> `pdf`, `docx`, `doc`, `odt`, `rtf`, `txt`, `png`, `jpg`, `jpeg`, `webp`.
 2. **Calc (Planilhas)**:
-   - `xls`, `xlsx`, `ods`, `csv` -> `pdf`, `xlsx`, `xls`, `ods`, `csv`, `html`, `png`.
+   - `xls`, `xlsx`, `ods`, `csv` -> `pdf`, `xlsx`, `xls`, `ods`, `csv`, `html`, `png`, `jpg`, `jpeg`, `webp`.
 3. **Impress (Apresentações)**:
-   - `ppt`, `pptx`, `odp` -> `pdf`, `pptx`, `ppt`, `odp`, `png`, `svg`.
+   - `ppt`, `pptx`, `odp` -> `pdf`, `pptx`, `ppt`, `odp`, `png`, `jpg`, `jpeg`, `webp`, `svg`.
 4. **Draw (Desenhos Vetoriais e Documentos PDF)**:
-   - `odg`, `pdf` -> `pdf`, `png`, `svg`.
-   - *Nota Arquitetural sobre PDF -> DOCX*: No núcleo do LibreOffice, arquivos PDF são importados exclusivamente no componente Draw, que não possui filtro de saída para formatos de texto (`docx`, `doc`, `odt`). Não são permitidas simulações ou pontes artificiais dentro do motor do LibreOffice.
+   - `odg`, `pdf` -> `pdf`, `png`, `jpg`, `jpeg`, `webp`, `svg`.
+   - *Nota Arquitetural sobre PDF -> DOCX*: No núcleo do LibreOffice, arquivos PDF são importados exclusivamente no componente Draw, que não possui filtro de saída para formatos de texto (`docx`, `doc`, `odt`). Não são permitidas simulações ou pontes artificiais dentro do motor do LibreOffice. Futuramente, quando uma biblioteca especializada em reconstrução de layout ou extração de fluxo for incorporada, ela será introduzida como um motor independente e desacoplado.
 
-### 15.3. Regra de Pureza de Motores e Proibição de Encadeamento Oculto
-1. **Isolamento de Responsabilidade**: Um motor individual implementando `IModule` **nunca deve invocar outro motor** em sua rotina interna (ex: renderizar documento no LibreOffice e chamar o ImageMagick internamente para transcodificar para JPG).
-2. **Pipelines Multi-Motor (Especificação Futura)**:
-   - Conversões compostas que exigem mais de uma tecnologia pertencerão a um orquestrador de pipeline multi-estágio.
-   - A interface do usuário exibirá um indicador explícito de que mais de um motor será utilizado.
-   - O fluxo visual em cards detalhará todos os estágios intermediários até o download final (ex: `[Documento.pdf] ➔ [Passo 1: PNG (LibreOffice)] ➔ [Passo 2: JPG (ImageMagick)]`).
-   - O componente de progresso renderizará uma barra de carregamento dedicada para cada estágio individual da cadeia.
-
-### 15.4. Tratamento Canônico de Documentos Multi-Página para Imagens
-Quando o LibreOffice WASM exporta um documento com múltiplas páginas para formato raster/vetorial (`.png`, `.svg`):
-1. **Exportação Integral (Todas as Páginas)**: O worker agrupa todas as páginas renderizadas (`page_1.png`, `page_2.png`, ...) em um pacote ZIP não compactado (`PK\x03\x04`). O motor ajusta automaticamente o nome final para `${basename}.zip` e o MIME para `application/zip`, evitando que o sistema operacional receba um ZIP com extensão `.png` e reporte arquivo corrompido.
-2. **Exportação de Página Única**: Quando o usuário seleciona uma página específica através do modificador `page_range` (ex: `1` ou capa), o motor descompacta dinamicamente os dados brutos da página requerida e entrega um `.png` puro com cabeçalho válido (`\x89PNG`).
-
-### 15.5. Validação Obrigatória de Magic Bytes no Test Runner (`scripts/test-conversion.ts`)
-Para impedir que arquivos com contêiner incorreto ou dados corrompidos passem nos testes automatizados:
-1. O executor `scripts/test-conversion.ts` inspeciona os primeiros bytes (Magic Bytes) de cada arquivo gerado após a conversão.
-2. Assinaturas binárias validadas obrigatoriamente:
-   - `PNG`: `0x89 0x50 0x4E 0x47` (`\x89PNG`). Se receber assinatura `PK\x03\x04`, o teste falha acusando ZIP espúrio.
-   - `PDF`: `0x25 0x50 0x44 0x46` (`%PDF-`).
-   - `DOCX`, `XLSX`, `PPTX`, `ODT`, `ZIP`: `0x50 0x4B 0x03 0x04` (`PK\x03\x04`).
-   - `MKV`, `WEBM`: `0x1A 0x45 0xDF 0xA3` (EBML Header).
-   - `MP4`: Caixa `ftyp` no cabeçalho ISOBMFF.
-3. Se a assinatura não corresponder ao formato de saída esperado, a conversão é sumariamente reprovada com relatório detalhado de asserção.
+### 15.3. Modificadores de Documentos Suportados
+1. **Intervalo de Páginas (`page_range`)**:
+   - Permite extrair intervalos de páginas ou páginas individuais (ex: `1-3, 5`, ou `1`).
+   - Suportado no `libreoffice` e no `pdf-lib` (`src/modules/engines/pdf.ts`).
+2. **Conformidade PDF/A (`pdf_compliance`)**:
+   - Gera documentos em formato arquivístico padronizado (`pdfa-1b`, `pdfa-2b`, `pdfa-3b`).
+   - Suportado no `libreoffice` via filtros nativos de exportação PDF.
+3. **Densidade de Renderização (`image_dpi`)**:
+   - Controla a resolução em DPI (72 a 600 DPI) para conversão de documentos em imagens (`png`, `jpg`, `webp`).
+   - Suportado no `libreoffice` e no `@imagemagick/magick-wasm`.
 

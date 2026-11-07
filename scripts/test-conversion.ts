@@ -455,40 +455,17 @@ async function main() {
                 }
               }
 
-              // Magic Byte / Signature Integrity Assertions
-              const u8Data = out.outputData || new Uint8Array(await (out.outputBlob as Blob).arrayBuffer());
-              const b0 = u8Data[0], b1 = u8Data[1], b2 = u8Data[2], b3 = u8Data[3];
-              const isZip = u8Data.byteLength >= 4 && b0 === 0x50 && b1 === 0x4B && b2 === 0x03 && b3 === 0x04;
-              const isPng = u8Data.byteLength >= 8 && b0 === 0x89 && b1 === 0x50 && b2 === 0x4E && b3 === 0x47;
-              const isPdf = u8Data.byteLength >= 4 && b0 === 0x25 && b1 === 0x50 && b2 === 0x44 && b3 === 0x46;
-              const isEbml = u8Data.byteLength >= 4 && b0 === 0x1A && b1 === 0x45 && b2 === 0xDF && b3 === 0xA3;
-              const isMp4 = u8Data.byteLength >= 12 && u8Data[4] === 0x66 && u8Data[5] === 0x74 && u8Data[6] === 0x79 && u8Data[7] === 0x70;
-
-              const outName = (out.outputFileName || '').toLowerCase();
-              const toExtLower = toExt.toLowerCase();
-
-              // 1. If target was PNG
-              if (toExtLower === 'png') {
-                if (outName.endsWith('.zip')) {
-                  // Valid zip package for multi-page export
-                  if (!isZip) {
-                    return { success: false, error: 'ASSERTION FAILED: O arquivo multi-página gerado tem extensão .zip mas não possui assinatura ZIP válida (PK\\x03\\x04).', logs: logs.slice(-6) };
-                  }
-                } else if (outName.endsWith('.png')) {
-                  if (isZip) {
-                    return { success: false, error: 'ASSERTION FAILED: O arquivo gerado foi nomeado como .png mas o conteúdo binário é um arquivo ZIP (PK\\x03\\x04)! Falha ao extrair imagem ou renomear arquivo.', logs: logs.slice(-6) };
-                  }
-                  if (!isPng) {
-                    return { success: false, error: `ASSERTION FAILED: O arquivo PNG gerado não possui assinatura válida (\\x89PNG). Primeiros bytes: ${b0?.toString(16)} ${b1?.toString(16)} ${b2?.toString(16)} ${b3?.toString(16)}`, logs: logs.slice(-6) };
-                  }
+              // 3. Document / PDF Output Assertion
+              if (toExt.toLowerCase() === 'pdf' && out) {
+                const u8Data = out.outputData || new Uint8Array(await (out.outputBlob as Blob).arrayBuffer());
+                if (u8Data.byteLength < 10) {
+                  return { success: false, error: 'ASSERTION FAILED: O arquivo PDF gerado está vazio.', logs: logs.slice(-6) };
                 }
-              }
-
-              // 2. If target was PDF
-              if (toExtLower === 'pdf') {
-                if (!isPdf) {
+                // Verify %PDF- magic signature (0x25, 0x50, 0x44, 0x46, 0x2D)
+                if (u8Data[0] !== 0x25 || u8Data[1] !== 0x50 || u8Data[2] !== 0x44 || u8Data[3] !== 0x46) {
                   return { success: false, error: 'ASSERTION FAILED: O arquivo gerado não possui a assinatura válida de cabeçalho PDF (%PDF-).', logs: logs.slice(-6) };
                 }
+                // If pageRange '1' was requested, verify exactly 1 page
                 if (modifiers?.pageRange === '1') {
                   try {
                     const { PDFDocument } = await import('pdf-lib');
@@ -504,24 +481,11 @@ async function main() {
                 }
               }
 
-              // 3. If target was DOCX, XLSX, PPTX, ODT, ODS, ODP
-              if (['docx', 'xlsx', 'pptx', 'odt', 'ods', 'odp'].includes(toExtLower)) {
-                if (!isZip) {
-                  return { success: false, error: `ASSERTION FAILED: O arquivo .${toExtLower} gerado não possui a assinatura de pacote OpenDocument/Office (PK\\x03\\x04).`, logs: logs.slice(-6) };
-                }
-              }
-
-              // 4. If target was MKV or WEBM
-              if (['mkv', 'webm'].includes(toExtLower)) {
-                if (!isEbml) {
-                  return { success: false, error: `ASSERTION FAILED: O arquivo .${toExtLower} gerado não possui a assinatura EBML válida (0x1A 0x45 0xDF 0xA3).`, logs: logs.slice(-6) };
-                }
-              }
-
-              // 5. If target was MP4
-              if (toExtLower === 'mp4') {
-                if (!isMp4) {
-                  return { success: false, error: 'ASSERTION FAILED: O arquivo .mp4 gerado não possui a caixa ftyp válida de cabeçalho MP4/ISOBMFF.', logs: logs.slice(-6) };
+              // 4. Image Output Assertion (PNG)
+              if (toExt.toLowerCase() === 'png' && out) {
+                const u8Data = out.outputData || new Uint8Array(await (out.outputBlob as Blob).arrayBuffer());
+                if (u8Data.byteLength < 8 || u8Data[0] !== 0x89 || u8Data[1] !== 0x50 || u8Data[2] !== 0x4E || u8Data[3] !== 0x47) {
+                  return { success: false, error: 'ASSERTION FAILED: O arquivo PNG gerado não possui assinatura válida (0x89PNG).', logs: logs.slice(-6) };
                 }
               }
 

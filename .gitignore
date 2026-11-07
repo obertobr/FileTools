@@ -35,3 +35,6 @@ test-results/
 # Test fixtures (generated sample files)
 tests/fixtures/
 
+# Generated WebAssembly runtime binaries (managed by scripts/setup-wasm.js)
+public/wasm/
+
