@@ -1,4 +1,4 @@
-﻿import { Github, Settings } from 'lucide-react';
+import { Github, Settings } from 'lucide-react';
 import { Button } from '@/ui/components/core';
 
 const navItems = [
