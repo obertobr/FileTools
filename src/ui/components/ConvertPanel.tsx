@@ -12,6 +12,9 @@ import {
   Image as ImageIcon,
   FileText,
   Archive,
+  BookOpen,
+  Type,
+  Box,
   File as FileIcon,
 } from 'lucide-react';
 import { UploadDropzone } from './UploadDropzone';
@@ -26,6 +29,12 @@ import { DownloadResult } from './DownloadResult';
 import { Button, Card, Typography, Badge } from '@/ui/components/core';
 import { FORMATS, describeFile, formatBytes, type Format, type Category } from '@/lib/formats';
 import { resolvePossibleConversions, resolveAvailableEngines, type EngineOption } from '@/modules/registry';
+import {
+  findOptimalConversionRoutes,
+  resolveReachableTargets,
+  type ConversionRoute,
+} from '@/core/routing/conversionRouter';
+import { executeConversionRoute } from '@/core/engine/PipelineExecutor';
 import { WorkerManager } from '@/core/engine/WorkerManager';
 import { type ConversionModifiers, DEFAULT_CONVERSION_MODIFIERS } from '@/shared/types/conversionModifiers';
 import { probeMediaData, probeWithBrowser, type MediaProbeResult } from '@/core/media/mediaProbe';
@@ -37,6 +46,9 @@ const categoryIcons: Record<Category, typeof FileIcon> = {
   image: ImageIcon,
   document: FileText,
   archive: Archive,
+  ebook: BookOpen,
+  font: Type,
+  model3d: Box,
   other: FileIcon,
 };
 
@@ -57,6 +69,7 @@ export function ConvertPanel({
   const [selected, setSelected] = useState<string | null>(fixedTarget ?? null);
   const [isChangingFormat, setIsChangingFormat] = useState(false);
   const [availableEngines, setAvailableEngines] = useState<EngineOption[]>([]);
+  const [availableRoutes, setAvailableRoutes] = useState<ConversionRoute[]>([]);
   const [selectedEngineId, setSelectedEngineId] = useState<string | null>(null);
   const [conversionModifiers, setConversionModifiers] = useState<ConversionModifiers>(DEFAULT_CONVERSION_MODIFIERS);
   const [probedMedia, setProbedMedia] = useState<MediaProbeResult | undefined>();
@@ -87,6 +100,10 @@ export function ConvertPanel({
         });
       });
 
+      resolveReachableTargets(sourceExt, file.type).forEach((ext) => {
+        targetExts.add(ext);
+      });
+
       return FORMATS
         .filter(f => targetExts.has(f.ext) && f.ext !== sourceExt)
         .filter((c) => {
@@ -111,20 +128,42 @@ export function ConvertPanel({
   useEffect(() => {
     let isCurrent = true;
     if (sourceExt && target) {
-      resolveAvailableEngines(sourceExt, target, file?.type).then((engines) => {
-        if (isCurrent) {
+      resolveAvailableEngines(sourceExt, target, file?.type).then(async (engines) => {
+        if (!isCurrent) return;
+        if (engines.length > 0) {
+          setAvailableRoutes([]);
           setAvailableEngines(engines);
-          if (engines.length > 0) {
-            setSelectedEngineId((prev) => {
-              const stillExists = engines.some((e) => e.moduleId === prev);
-              return stillExists ? prev : engines[0].moduleId;
-            });
-          } else {
-            setSelectedEngineId(null);
-          }
+          setSelectedEngineId((prev) => {
+            const stillExists = engines.some((e) => e.moduleId === prev);
+            return stillExists ? prev : engines[0].moduleId;
+          });
+          return;
+        }
+
+        const routes = await findOptimalConversionRoutes(sourceExt, target, file?.type);
+        if (!isCurrent) return;
+        setAvailableRoutes(routes);
+        const syntheticEngines: EngineOption[] = routes.map((r, idx) => ({
+          moduleId: r.id,
+          moduleName: `Sequência ${r.hops.length} etapas (${r.hops.map((h) => h.moduleId).join(' → ')})`,
+          version: `${r.hops.length}-step`,
+          speedScore: r.totalScore,
+          acceleration: 'cpu-singlethread',
+          performanceNotes: r.label,
+          isRecommended: idx === 0,
+        }));
+        setAvailableEngines(syntheticEngines);
+        if (syntheticEngines.length > 0) {
+          setSelectedEngineId((prev) => {
+            const stillExists = syntheticEngines.some((e) => e.moduleId === prev);
+            return stillExists ? prev : syntheticEngines[0].moduleId;
+          });
+        } else {
+          setSelectedEngineId(null);
         }
       });
     } else {
+      setAvailableRoutes([]);
       setAvailableEngines([]);
       setSelectedEngineId(null);
     }
@@ -182,15 +221,24 @@ export function ConvertPanel({
   }, [file]);
 
   const activeEngine = availableEngines.find((e) => e.moduleId === selectedEngineId) ?? availableEngines[0];
+  const activeRoute = availableRoutes.find((r) => r.id === activeEngine?.moduleId) ?? null;
 
   // Engine compatibility check with active options
   const engineCompatibility = useMemo(() => {
+    if (activeRoute?.isMultiStage) {
+      return {
+        isIncompatible: false,
+        incompatibleModifiers: [],
+        incompatibleModifierNames: [],
+        reason: '',
+      };
+    }
     return checkEngineCompatibility(activeEngine?.moduleId, conversionModifiers);
-  }, [activeEngine?.moduleId, conversionModifiers]);
+  }, [activeEngine?.moduleId, activeRoute, conversionModifiers]);
 
   const incompatibleEngineIds = useMemo(() => {
     return availableEngines
-      .filter((e) => checkEngineCompatibility(e.moduleId, conversionModifiers).isIncompatible)
+      .filter((e) => !e.moduleId.startsWith('pipeline:') && checkEngineCompatibility(e.moduleId, conversionModifiers).isIncompatible)
       .map((e) => e.moduleId);
   }, [availableEngines, conversionModifiers]);
 
@@ -223,7 +271,10 @@ export function ConvertPanel({
     if (!engineToUse) return;
 
     // Guard against running conversion with incompatible options
-    const comp = checkEngineCompatibility(engineToUse.moduleId, conversionModifiers);
+    const routeToRun = availableRoutes.find((r) => r.id === engineToUse.moduleId);
+    const comp = routeToRun?.isMultiStage
+      ? { isIncompatible: false, reason: '' }
+      : checkEngineCompatibility(engineToUse.moduleId, conversionModifiers);
     if (comp.isIncompatible) {
       setErrorMessage(comp.reason);
       setFailedEngineName(engineToUse.moduleName);
@@ -240,28 +291,43 @@ export function ConvertPanel({
     setFailedEngineName('');
     
     try {
-      const manager = WorkerManager.getInstance();
-      await manager.initialize();
-      
-      const result = await manager.convert(
-        engineToUse.moduleId,
-        { 
-          file: file,
-          targetFormat: '.' + target.replace(/^\.+/, '').toLowerCase(),
-          originalName: file.name,
-          options: conversionModifiers,
-          modifiers: conversionModifiers,
-          userMaxThreads: conversionModifiers.threadsMode === 'custom' ? (conversionModifiers.customThreads ?? conversionModifiers.userMaxThreads) : undefined,
-        },
-        (p, msg) => {
-          setProgress(p);
-          if (msg) setProgressMessage(msg);
-        },
-        (msg) => {
-          setLogs((prev) => [...prev.slice(-150), msg]);
-          console.debug(msg);
-        }
-      );
+      const onProgressUpdate = (p: number, msg?: string) => {
+        setProgress(p);
+        if (msg) setProgressMessage(msg);
+      };
+      const onLogMessage = (msg: string) => {
+        setLogs((prev) => [...prev.slice(-150), msg]);
+        console.debug(msg);
+      };
+
+      let result: Record<string, unknown>;
+      if (routeToRun?.isMultiStage) {
+        result = await executeConversionRoute(
+          routeToRun,
+          file,
+          file.name,
+          conversionModifiers,
+          onProgressUpdate,
+          onLogMessage
+        ) as unknown as Record<string, unknown>;
+      } else {
+        const manager = WorkerManager.getInstance();
+        await manager.initialize();
+
+        result = await manager.convert(
+          engineToUse.moduleId,
+          { 
+            file: file,
+            targetFormat: '.' + target.replace(/^\.+/, '').toLowerCase(),
+            originalName: file.name,
+            options: conversionModifiers,
+            modifiers: conversionModifiers,
+            userMaxThreads: conversionModifiers.threadsMode === 'custom' ? (conversionModifiers.customThreads ?? conversionModifiers.userMaxThreads) : undefined,
+          },
+          onProgressUpdate,
+          onLogMessage
+        );
+      }
       
       if (result && (result.outputBlob || result.outputData)) {
         let blob: Blob;
@@ -434,6 +500,7 @@ export function ConvertPanel({
             selectedEngineId={activeEngine?.moduleId ?? null}
             onSelectEngine={setSelectedEngineId}
             incompatibleEngineIds={incompatibleEngineIds}
+            activeRoute={activeRoute}
           />
 
           <ConversionModifiersPanel

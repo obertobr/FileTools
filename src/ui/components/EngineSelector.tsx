@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Zap, Cpu, Laptop, ChevronDown, ChevronUp, Check, Layers, AlertTriangle } from 'lucide-react';
 import type { EngineOption } from '@/modules/registry';
+import type { ConversionRoute } from '@/core/routing/conversionRouter';
 import { Card, Typography, Badge } from '@/ui/components/core';
 import { cn } from '@/lib/utils';
 
@@ -9,6 +10,7 @@ export interface EngineSelectorProps {
   selectedEngineId: string | null;
   onSelectEngine: (engineId: string) => void;
   incompatibleEngineIds?: string[];
+  activeRoute?: ConversionRoute | null;
 }
 
 function getAccelerationIcon(type: EngineOption['acceleration']) {
@@ -44,6 +46,7 @@ export function EngineSelector({
   selectedEngineId,
   onSelectEngine,
   incompatibleEngineIds = [],
+  activeRoute,
 }: EngineSelectorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -122,7 +125,9 @@ export function EngineSelector({
                 )}
               </div>
               <Typography variant="caption" color="muted" className="truncate mt-0.5 block">
-                {currentEngine.performanceNotes}
+                {activeRoute?.isMultiStage
+                  ? `Sequência (${activeRoute.hops.length} etapas): ${activeRoute.label}`
+                  : currentEngine.performanceNotes}
               </Typography>
             </div>
           </div>
