@@ -45,7 +45,16 @@ export interface ModuleManifest {
   name: string;
   version: string;
   description: string;
-  category: 'video' | 'audio' | 'document' | 'image';
+  category:
+    | 'video'
+    | 'audio'
+    | 'document'
+    | 'image'
+    | 'archive'
+    | 'ebook'
+    | 'font'
+    | 'model3d'
+    | 'ai';
   /** Used for dynamic UI generation and SSG SEO route compilation */
   supportedConversions: ConversionRule[];
   /**

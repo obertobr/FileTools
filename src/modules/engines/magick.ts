@@ -14,6 +14,8 @@ import {
   MagickFormat,
   Density,
   DensityUnit,
+  AlphaAction,
+  MagickColor,
 } from '@imagemagick/magick-wasm';
 import type { IModule, ExecutionContext } from '@/shared/types/module';
 import { getMimeType } from '@/core/knowledge/mimeTypes';
@@ -55,10 +57,19 @@ const EXT_TO_MAGICK_FORMAT: Record<string, MagickFormat> = {
   '.tif': MagickFormat.Tiff,
   '.avif': MagickFormat.Avif,
   '.heic': MagickFormat.Heic,
+  '.heif': MagickFormat.Heic,
   '.bmp': MagickFormat.Bmp,
   '.gif': MagickFormat.Gif,
   '.ico': MagickFormat.Ico,
   '.pdf': MagickFormat.Pdf,
+  '.psd': MagickFormat.Psd,
+  '.tga': MagickFormat.Tga,
+  '.pnm': MagickFormat.Pnm,
+  '.ppm': MagickFormat.Ppm,
+  '.pgm': MagickFormat.Pgm,
+  '.pbm': MagickFormat.Pbm,
+  '.jp2': MagickFormat.Jp2,
+  '.svg': MagickFormat.Svg,
 };
 
 export const MagickModule: IModule = {
@@ -68,11 +79,51 @@ export const MagickModule: IModule = {
     version: '0.0.43',
     description: 'Conversor universal de imagens de alta fidelidade via ImageMagick WebAssembly.',
     category: 'image',
-    supportedModifiers: ['quality', 'resolution', 'image_dpi'],
+    supportedModifiers: ['quality', 'resolution', 'image_dpi', 'image_transform', 'background_color'],
     supportedConversions: [
       {
-        from: ['.png', '.jpg', '.jpeg', '.webp', '.tiff', '.tif', '.bmp', '.gif', '.heic', '.avif', '.ico'],
-        to: ['.png', '.jpg', '.jpeg', '.webp', '.tiff', '.bmp', '.gif', '.avif', '.ico', '.pdf'],
+        from: [
+          '.png',
+          '.jpg',
+          '.jpeg',
+          '.webp',
+          '.tiff',
+          '.tif',
+          '.bmp',
+          '.gif',
+          '.heic',
+          '.heif',
+          '.avif',
+          '.ico',
+          '.psd',
+          '.tga',
+          '.pnm',
+          '.ppm',
+          '.pgm',
+          '.pbm',
+          '.jp2',
+          '.svg',
+        ],
+        to: [
+          '.png',
+          '.jpg',
+          '.jpeg',
+          '.webp',
+          '.tiff',
+          '.tif',
+          '.bmp',
+          '.gif',
+          '.avif',
+          '.ico',
+          '.pdf',
+          '.psd',
+          '.tga',
+          '.pnm',
+          '.ppm',
+          '.pgm',
+          '.pbm',
+          '.jp2',
+        ],
         lossy: true,
         speedScore: 90,
         acceleration: 'cpu-singlethread',
@@ -140,6 +191,29 @@ export const MagickModule: IModule = {
             if (options?.targetWidth && options.targetWidth > 0) {
               const targetH = options.targetHeight && options.targetHeight > 0 ? options.targetHeight : 0;
               image.resize(options.targetWidth, targetH);
+            }
+
+            // Apply image transforms (rotate, flip, grayscale, strip EXIF)
+            if (options?.imageRotateDeg && Number(options.imageRotateDeg) !== 0) {
+              image.rotate(Number(options.imageRotateDeg));
+            }
+            if (options?.imageFlipH) {
+              image.flop();
+            }
+            if (options?.imageFlipV) {
+              image.flip();
+            }
+            if (options?.imageGrayscale) {
+              image.grayscale();
+            }
+            if (options?.imageStripMetadata) {
+              image.strip();
+            }
+            if (options?.backgroundColor) {
+              image.backgroundColor = new MagickColor(options.backgroundColor);
+              if (outputExt === '.jpg' || outputExt === '.jpeg' || outputExt === '.bmp') {
+                image.alpha(AlphaAction.Remove);
+              }
             }
 
             context.onProgress(60, 'Codificando novo formato...');

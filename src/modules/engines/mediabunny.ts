@@ -90,19 +90,27 @@ export const MediabunnyModule: IModule = {
     supportedConversions: [
       {
         from: ['.mp4', '.m4v', '.mov', '.3gp', '.mkv', '.webm', '.ts'],
-        to: ['.mp4', '.m4v', '.mov', '.mkv', '.webm'],
+        to: ['.mp4', '.m4v', '.mov', '.mkv', '.webm', '.ts'],
         lossy: false,
         speedScore: 74,
         acceleration: 'gpu',
         performanceNotes: 'Aceleração nativa por hardware GPU (WebCodecs) / Transmuxing direto',
       },
       {
-        from: ['.mp4', '.m4v', '.mov', '.3gp', '.mkv', '.webm'],
-        to: ['.m4a', '.opus', '.ogg', '.wav'],
+        from: ['.mp4', '.m4v', '.mov', '.3gp', '.mkv', '.webm', '.ts'],
+        to: ['.m4a', '.opus', '.ogg', '.wav', '.mp3', '.flac', '.aac'],
         lossy: false,
         speedScore: 68,
         acceleration: 'gpu',
-        performanceNotes: 'Extração e re-encodificação de áudio via WebCodecs (AAC/Opus/PCM)',
+        performanceNotes: 'Extração e re-encodificação de áudio via WebCodecs (AAC/Opus/PCM/MP3/FLAC)',
+      },
+      {
+        from: ['.wav', '.mp3', '.flac', '.ogg', '.opus', '.m4a', '.aac'],
+        to: ['.mp3', '.wav', '.flac', '.ogg', '.opus', '.m4a', '.aac'],
+        lossy: false,
+        speedScore: 68,
+        acceleration: 'gpu',
+        performanceNotes: 'Transcodificação de áudio via WebCodecs e muxing direto',
       },
     ],
     inputs: [

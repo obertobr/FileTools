@@ -271,5 +271,33 @@ describe('Module Registry', () => {
       const magick = ModuleRegistry['magick-wasm'];
       expect(magick.manifest.supportedModifiers).toContain('image_dpi');
     });
+
+    it('resolves all 17 newly added/expanded engines across Media, Archives, Images, PDF, Ebooks, Fonts, and 3D/CAD', async () => {
+      expect((await resolveAvailableEngines('WAV', 'MP3')).find(e => e.moduleId === 'lamejs')).toBeDefined();
+      expect((await resolveAvailableEngines('MP4', 'MP3')).find(e => e.moduleId === 'mediabunny')).toBeDefined();
+
+      expect((await resolveAvailableEngines('PNG', 'JXL')).find(e => e.moduleId === 'jsquash')).toBeDefined();
+      expect((await resolveAvailableEngines('PNG', 'QOI')).find(e => e.moduleId === 'jsquash')).toBeDefined();
+      expect((await resolveAvailableEngines('HEIC', 'PNG')).find(e => e.moduleId === 'libheif')).toBeDefined();
+      expect((await resolveAvailableEngines('DNG', 'PNG')).find(e => e.moduleId === 'utif')).toBeDefined();
+      expect((await resolveAvailableEngines('SVG', 'PNG')).find(e => e.moduleId === 'resvg')).toBeDefined();
+      expect((await resolveAvailableEngines('SVG', 'SVG')).find(e => e.moduleId === 'svgo')).toBeDefined();
+
+      expect((await resolveAvailableEngines('ZIP', 'GZ')).find(e => e.moduleId === 'fflate')).toBeDefined();
+      expect((await resolveAvailableEngines('PNG', 'ZIP')).find(e => e.moduleId === 'zipjs')).toBeDefined();
+      expect((await resolveAvailableEngines('TAR', 'ZIP')).find(e => e.moduleId === 'libarchive')).toBeDefined();
+      expect((await resolveAvailableEngines('RAR', '7Z')).find(e => e.moduleId === '7z-wasm')).toBeDefined();
+
+      expect((await resolveAvailableEngines('PDF', 'TXT')).find(e => e.moduleId === 'pdfjs')).toBeDefined();
+      expect((await resolveAvailableEngines('XLSM', 'CSV')).find(e => e.moduleId === 'sheetjs')).toBeDefined();
+      expect((await resolveAvailableEngines('MOBI', 'EPUB')).find(e => e.moduleId === 'foliate')).toBeDefined();
+
+      expect((await resolveAvailableEngines('TTF', 'WOFF')).find(e => e.moduleId === 'fonteditor')).toBeDefined();
+      expect((await resolveAvailableEngines('WOFF2', 'TTF')).find(e => e.moduleId === 'wawoff2')).toBeDefined();
+
+      expect((await resolveAvailableEngines('FBX', 'GLB')).find(e => e.moduleId === 'assimp')).toBeDefined();
+      expect((await resolveAvailableEngines('STEP', 'GLB')).find(e => e.moduleId === 'occt')).toBeDefined();
+      expect((await resolveAvailableEngines('3MF', 'STL')).find(e => e.moduleId === 'lib3mf')).toBeDefined();
+    });
   });
 });

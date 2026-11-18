@@ -7,13 +7,13 @@ export const SheetJSModule: IModule = {
     id: 'sheetjs',
     name: 'SheetJS',
     version: '0.18.5',
-    description: 'Conversor local e ultrarrápido de planilhas e dados estruturados (XLSX, XLS, ODS, CSV, TSV, TXT, JSON, HTML).',
+    description: 'Conversor local e ultrarrápido de planilhas e dados estruturados (XLSX, XLSM, XLSB, XLS, ODS, FODS, CSV, TSV, DIF, SYLK, DBF, JSON, HTML).',
     category: 'document',
-    supportedModifiers: [],
+    supportedModifiers: ['csv_delimiter'],
     supportedConversions: [
       {
-        from: ['.xlsx', '.xls', '.ods', '.csv', '.tsv', '.txt', '.json', '.html', '.htm'],
-        to: ['.xlsx', '.xls', '.ods', '.csv', '.tsv', '.txt', '.json', '.html'],
+        from: ['.xlsx', '.xlsm', '.xlsb', '.xls', '.ods', '.fods', '.csv', '.tsv', '.dif', '.sylk', '.dbf', '.txt', '.json', '.html', '.htm'],
+        to: ['.xlsx', '.xlsm', '.xlsb', '.xls', '.ods', '.fods', '.csv', '.tsv', '.dif', '.sylk', '.txt', '.json', '.html'],
         lossy: false,
         speedScore: 95
       },
@@ -30,6 +30,9 @@ export const SheetJSModule: IModule = {
     const fileData = inputs.fileData as Uint8Array | undefined;
     const originalName = inputs.originalName as string;
     const targetFormat = inputs.targetFormat as string;
+    const modifiers = (inputs.modifiers || inputs.options || {}) as {
+      csvDelimiter?: string;
+    };
 
     if ((!file && !fileData) || !originalName || !targetFormat) {
       throw new Error('SheetJS module requires file (File/Blob) or fileData (Uint8Array), originalName, and targetFormat.');
@@ -69,9 +72,12 @@ export const SheetJSModule: IModule = {
       } catch (err: unknown) {
         throw new Error(`O arquivo HTML não contém dados tabulares legíveis pelo SheetJS: ${err instanceof Error ? err.message : String(err)}`);
       }
-    } else if (inputExt === '.csv' || inputExt === '.tsv' || inputExt === '.txt') {
+    } else if (inputExt === '.csv' || inputExt === '.tsv' || inputExt === '.txt' || inputExt === '.dif' || inputExt === '.sylk') {
       const text = new TextDecoder().decode(data);
-      workbook = XLSX.read(text, { type: 'string' });
+      workbook = XLSX.read(text, {
+        type: 'string',
+        ...(modifiers.csvDelimiter ? { FS: modifiers.csvDelimiter } : {}),
+      });
     } else {
       workbook = XLSX.read(data, { type: 'array' });
     }
@@ -86,7 +92,9 @@ export const SheetJSModule: IModule = {
 
     switch (targetExt) {
       case '.csv': {
-        const csvString = XLSX.utils.sheet_to_csv(worksheet);
+        const csvString = XLSX.utils.sheet_to_csv(worksheet, {
+          FS: modifiers.csvDelimiter || ',',
+        });
         outputData = new TextEncoder().encode(csvString);
         break;
       }
@@ -115,6 +123,16 @@ export const SheetJSModule: IModule = {
         outputData = new Uint8Array(wbOut);
         break;
       }
+      case '.xlsm': {
+        const wbOut = XLSX.write(workbook, { bookType: 'xlsm', type: 'array' });
+        outputData = new Uint8Array(wbOut);
+        break;
+      }
+      case '.xlsb': {
+        const wbOut = XLSX.write(workbook, { bookType: 'xlsb', type: 'array' });
+        outputData = new Uint8Array(wbOut);
+        break;
+      }
       case '.xls': {
         const wbOut = XLSX.write(workbook, { bookType: 'biff8', type: 'array' });
         outputData = new Uint8Array(wbOut);
@@ -122,6 +140,21 @@ export const SheetJSModule: IModule = {
       }
       case '.ods': {
         const wbOut = XLSX.write(workbook, { bookType: 'ods', type: 'array' });
+        outputData = new Uint8Array(wbOut);
+        break;
+      }
+      case '.fods': {
+        const wbOut = XLSX.write(workbook, { bookType: 'fods', type: 'array' });
+        outputData = new Uint8Array(wbOut);
+        break;
+      }
+      case '.dif': {
+        const wbOut = XLSX.write(workbook, { bookType: 'dif', type: 'array' });
+        outputData = new Uint8Array(wbOut);
+        break;
+      }
+      case '.sylk': {
+        const wbOut = XLSX.write(workbook, { bookType: 'sylk', type: 'array' });
         outputData = new Uint8Array(wbOut);
         break;
       }

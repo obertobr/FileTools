@@ -15,6 +15,7 @@ import { getAudioCodecFlags } from '@/core/knowledge/audioCodecs';
 import { resolveColorSpaceArgs, resolvePixelFormatAndBitDepth } from '@/core/knowledge/colorPresets';
 import { resolveQualityCrf } from '@/core/knowledge/qualityPresets';
 import { getMimeType } from '@/core/knowledge/mimeTypes';
+import { extractFfmpegInputTrimFlags, extractFfmpegExtraOutputFlags } from './ffmpegModifierFlags';
 
 
 let ffmpegInstance: FFmpeg | null = null;
@@ -511,6 +512,10 @@ export const FFmpegModule: IModule = {
       'bit_depth',
       'bitrate',
       'color_space',
+      'audio_sample_rate',
+      'audio_channels',
+      'audio_normalize',
+      'media_trim',
     ],
     supportedConversions: [
       {
@@ -639,9 +644,13 @@ export const FFmpegModule: IModule = {
       }
 
       const isImageToVideo = categoryOfExtension(inputExt) === 'image' && (categoryOfExtension(outputExt) === 'video' || outputExt === '.gif');
-      const inputExtraFlags = isImageToVideo ? ['-loop', '1'] : [];
+      const inputExtraFlags = [
+        ...(isImageToVideo ? ['-loop', '1'] : []),
+        ...extractFfmpegInputTrimFlags(options),
+      ];
       const convArgs = getConversionArgs(inputExt, outputExt, options);
-      const fullArgs = [...inputExtraFlags, '-i', inputPath, '-stats', ...convArgs, outputPath];
+      const extraAudioOutFlags = extractFfmpegExtraOutputFlags(options, convArgs);
+      const fullArgs = [...inputExtraFlags, '-i', inputPath, '-stats', ...convArgs, ...extraAudioOutFlags, outputPath];
 
       context.onLog(`[FFmpeg] Executing: ffmpeg ${fullArgs.join(' ')}`);
       context.onProgress(0, 'Processando...');

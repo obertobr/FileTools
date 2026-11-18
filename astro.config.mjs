@@ -27,7 +27,21 @@ export default defineConfig({
       },
     },
     optimizeDeps: {
-      exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
+      exclude: [
+        '@ffmpeg/ffmpeg',
+        '@ffmpeg/util',
+        '@jsquash/avif',
+        '@jsquash/jpeg',
+        '@jsquash/png',
+        '@jsquash/webp',
+        '@jsquash/jxl',
+        '@jsquash/qoi',
+        '@resvg/resvg-wasm',
+        '7z-wasm',
+        'assimpjs',
+        'occt-import-js',
+        '@huggingface/transformers',
+      ],
     },
     worker: {
       format: 'es',

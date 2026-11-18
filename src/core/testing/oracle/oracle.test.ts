@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { validateMagicBytes } from './magicBytes';
+import { validateDecoder } from './decoderValidator';
 import { auditModifiers } from './modifierAuditor';
-import type { ConversionModifiers } from '@/shared/types/conversionModifiers';
+import { DEFAULT_CONVERSION_MODIFIERS, type ConversionModifiers } from '@/shared/types/conversionModifiers';
 
 describe('Layer 1: Magic Bytes Validator', () => {
   it('validates authentic PNG signature (\\x89PNG)', () => {
@@ -56,12 +57,59 @@ describe('Layer 1: Magic Bytes Validator', () => {
     expect(res.valid).toBe(false);
     expect(res.error).toContain('0 bytes');
   });
+
+  it('validates archive signatures (7z, gz, bz2, xz)', () => {
+    expect(validateMagicBytes(new Uint8Array([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c, 0x00]), '7z').valid).toBe(true);
+    expect(validateMagicBytes(new Uint8Array([0x1f, 0x8b, 0x08, 0x00]), 'gz').valid).toBe(true);
+    expect(validateMagicBytes(new Uint8Array([0x42, 0x5a, 0x68, 0x39]), 'bz2').valid).toBe(true);
+    expect(validateMagicBytes(new Uint8Array([0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00]), 'xz').valid).toBe(true);
+  });
+
+  it('validates next-gen image signatures (jxl, qoi)', () => {
+    expect(validateMagicBytes(new Uint8Array([0xff, 0x0a, 0x00, 0x00]), 'jxl').valid).toBe(true);
+    const qoi = new Uint8Array(14);
+    qoi.set([0x71, 0x6f, 0x69, 0x66]);
+    qoi[7] = 1;
+    qoi[11] = 1;
+    expect(validateMagicBytes(qoi, 'qoi').valid).toBe(true);
+  });
+
+  it('validates font signatures (ttf, otf, woff, woff2)', () => {
+    expect(validateMagicBytes(new Uint8Array([0x00, 0x01, 0x00, 0x00, 0x00, 0x0c]), 'ttf').valid).toBe(true);
+    expect(validateMagicBytes(new Uint8Array([0x4f, 0x54, 0x54, 0x4f, 0x00, 0x0c]), 'otf').valid).toBe(true);
+    expect(validateMagicBytes(new Uint8Array([0x77, 0x4f, 0x46, 0x46, 0x00]), 'woff').valid).toBe(true);
+    expect(validateMagicBytes(new Uint8Array([0x77, 0x4f, 0x46, 0x32, 0x00]), 'woff2').valid).toBe(true);
+  });
+
+  it('validates 3D/CAD and subtitle signatures (glb, stl, step, srt, vtt)', async () => {
+    const jsonChunk = new TextEncoder().encode('{"asset":{"version":"2.0"}} ');
+    const glb = new Uint8Array(20 + jsonChunk.length);
+    const view = new DataView(glb.buffer);
+    glb.set([0x67, 0x6c, 0x54, 0x46], 0);
+    view.setUint32(4, 2, true);
+    view.setUint32(8, glb.length, true);
+    view.setUint32(12, jsonChunk.length, true);
+    view.setUint32(16, 0x4e4f534a, true);
+    glb.set(jsonChunk, 20);
+    expect(validateMagicBytes(glb, 'glb').valid).toBe(true);
+    expect((await validateDecoder(glb, 'glb')).valid).toBe(true);
+
+    const stl = new Uint8Array(84 + 50);
+    new DataView(stl.buffer).setUint32(80, 1, true);
+    expect(validateMagicBytes(stl, 'stl').valid).toBe(true);
+    expect((await validateDecoder(stl, 'stl')).valid).toBe(true);
+
+    expect(validateMagicBytes(new TextEncoder().encode('ISO-10303-21;\nHEADER;'), 'step').valid).toBe(true);
+    expect(validateMagicBytes(new TextEncoder().encode('1\n00:00:00,000 --> 00:00:01,000\nOi\n'), 'srt').valid).toBe(true);
+    expect(validateMagicBytes(new TextEncoder().encode('WEBVTT\n\n00:00.000 --> 00:01.000\nOi\n'), 'vtt').valid).toBe(true);
+  });
 });
 
 describe('Layer 3: Modifier Effect Auditor', () => {
   it('detects resolution mismatch when engine ignores scale modifier', () => {
     const mockData = new Uint8Array(100);
     const modifiers: ConversionModifiers = {
+      ...DEFAULT_CONVERSION_MODIFIERS,
       activeCategories: ['resolution'],
       resolutionScale: '720p',
       targetWidth: 1280,
@@ -85,6 +133,7 @@ describe('Layer 3: Modifier Effect Auditor', () => {
   it('passes resolution audit when decoded width matches target within tolerance', () => {
     const mockData = new Uint8Array(100);
     const modifiers: ConversionModifiers = {
+      ...DEFAULT_CONVERSION_MODIFIERS,
       activeCategories: ['resolution'],
       resolutionScale: '720p',
       targetWidth: 1280,
@@ -104,6 +153,7 @@ describe('Layer 3: Modifier Effect Auditor', () => {
   it('detects page range mismatch when PDF has multiple pages but 1 was requested', () => {
     const mockData = new Uint8Array(100);
     const modifiers: ConversionModifiers = {
+      ...DEFAULT_CONVERSION_MODIFIERS,
       activeCategories: ['page_range'],
       pageRange: '1',
     };
@@ -121,6 +171,7 @@ describe('Layer 3: Modifier Effect Auditor', () => {
   it('detects video duration mismatch when requested duration was not applied', () => {
     const mockData = new Uint8Array(100);
     const modifiers: ConversionModifiers = {
+      ...DEFAULT_CONVERSION_MODIFIERS,
       activeCategories: ['video_duration'],
       videoDurationSeconds: 5,
     };

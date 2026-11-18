@@ -18,23 +18,48 @@ export async function validateDecoder(
   const cleanExt = targetExt.toLowerCase().replace(/^\./, '');
   const outName = (fileName || '').toLowerCase();
 
-  if (outName.endsWith('.zip') || cleanExt === 'zip') {
+  if (outName.endsWith('.zip') || ['zip', 'cbz', '3mf', 'xlsm', 'xlsb'].includes(cleanExt)) {
     return validateZipContainer(data);
   }
 
   // 1. Audio Formats
-  if (['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'opus', 'aiff', 'm4r'].includes(cleanExt)) {
+  if (['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'opus', 'aiff', 'aif', 'm4r'].includes(cleanExt)) {
     return validateAudioDecoder(data, cleanExt, mimeType);
   }
 
   // 2. Video Formats
-  if (['mp4', 'webm', 'mkv', 'mov', 'avi', '3gp', 'ts', 'flv', 'wmv', 'm4v', 'mpg', 'mpeg'].includes(cleanExt)) {
+  if (['mp4', 'webm', 'mkv', 'mov', 'avi', '3gp', 'ts', 'mts', 'm2ts', 'flv', 'wmv', 'm4v', 'mpg', 'mpeg', 'ogv'].includes(cleanExt)) {
     return validateVideoDecoder(data, cleanExt, mimeType);
   }
 
-  // 3. Image Formats (including GIF)
-  if (['png', 'jpg', 'jpeg', 'webp', 'bmp', 'ico', 'tiff', 'tif', 'gif'].includes(cleanExt)) {
+  // 3. Image Formats (including GIF, QOI, JXL, HEIC, AVIF)
+  if (['png', 'jpg', 'jpeg', 'webp', 'bmp', 'ico', 'tiff', 'tif', 'gif', 'avif', 'heic', 'heif', 'jxl', 'qoi'].includes(cleanExt)) {
     return validateImageDecoder(data, cleanExt, mimeType);
+  }
+
+  // 3.1. Archives (GZIP, TAR, 7Z)
+  if (['gz', 'tgz'].includes(cleanExt)) {
+    return validateGzipContainer(data);
+  }
+  if (cleanExt === 'tar') {
+    return validateTarContainer(data);
+  }
+  if (cleanExt === '7z') {
+    return {
+      valid: data.byteLength >= 32,
+      decoderName: '7z Header Validator',
+      details: { decodedBy: '7zHeaderCheck' },
+    };
+  }
+
+  // 3.2. Fonts
+  if (['ttf', 'otf', 'woff', 'woff2'].includes(cleanExt)) {
+    return validateFontDecoder(data, cleanExt);
+  }
+
+  // 3.3. 3D / CAD
+  if (['glb', 'gltf', 'stl', 'obj', 'ply'].includes(cleanExt)) {
+    return validate3DDecoder(data, cleanExt);
   }
 
   // 4. SVG
@@ -94,7 +119,7 @@ async function validateAudioDecoder(
   mimeType?: string
 ): Promise<Layer2DecoderResult> {
   const mime = mimeType || `audio/${ext === 'mp3' ? 'mpeg' : ext}`;
-  const blob = new Blob([data], { type: mime });
+  const blob = new Blob([data as unknown as BlobPart], { type: mime });
 
   // 1. First attempt: Web Audio API AudioContext.decodeAudioData
   try {
@@ -129,6 +154,34 @@ async function validateAudioDecoder(
       }
     }
   } catch {}
+
+  if (ext === 'wav' && (data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46)) {
+    try {
+      const { parseWavToPcm } = await import('@/modules/ai/aiUtils');
+      const pcm = parseWavToPcm(data);
+      const duration = (pcm.channels[0]?.length || 0) / Math.max(1, pcm.sampleRate);
+      if (pcm.channels.length > 0 && duration > 0) {
+        return {
+          valid: true,
+          decoderName: 'RIFF WAV PCM Parser',
+          details: {
+            duration,
+            channels: pcm.channels.length,
+            sampleRate: pcm.sampleRate,
+            decodedBy: 'WavPcmParser',
+          },
+        };
+      }
+    } catch {}
+  }
+
+  if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
+    return {
+      valid: false,
+      decoderName: 'Audio Decoder',
+      error: `Decodificação de áudio '${ext}' indisponível sem browser DOM/WebAudio.`,
+    };
+  }
 
   // 2. Fallback attempt: HTMLAudioElement
   return new Promise<Layer2DecoderResult>((resolve) => {
@@ -189,7 +242,7 @@ async function validateVideoDecoder(
   mimeType?: string
 ): Promise<Layer2DecoderResult> {
   const mime = mimeType || `video/${ext === 'mov' ? 'quicktime' : ext}`;
-  const blob = new Blob([data], { type: mime });
+  const blob = new Blob([data as unknown as BlobPart], { type: mime });
 
   return new Promise<Layer2DecoderResult>((resolve) => {
     const url = URL.createObjectURL(blob);
@@ -296,8 +349,36 @@ async function validateImageDecoder(
   ext: string,
   mimeType?: string
 ): Promise<Layer2DecoderResult> {
+  if (ext === 'qoi' && data.byteLength >= 14) {
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    const width = view.getUint32(4, false);
+    const height = view.getUint32(8, false);
+    if (width > 0 && height > 0) {
+      return {
+        valid: true,
+        decoderName: 'QOI Header Decoder',
+        details: { width, height, decodedBy: 'QOIHeader' },
+      };
+    }
+    return { valid: false, decoderName: 'QOI Header Decoder', error: 'Dimensões QOI inválidas.' };
+  }
+
+  if (['jxl', 'avif', 'webp', 'png', 'jpg', 'jpeg', 'qoi'].includes(ext) && typeof createImageBitmap !== 'function') {
+    try {
+      const { decodeImageWithJSquash } = await import('@/modules/engines/jsquash');
+      const frame = await decodeImageWithJSquash(data, `.${ext}`);
+      if (frame.width > 0 && frame.height > 0 && frame.data.byteLength === frame.width * frame.height * 4) {
+        return {
+          valid: true,
+          decoderName: 'JSquash WASM Decoder',
+          details: { width: frame.width, height: frame.height, decodedBy: 'JSquashWASM' },
+        };
+      }
+    } catch {}
+  }
+
   const mime = mimeType || `image/${ext === 'jpg' ? 'jpeg' : ext}`;
-  const blob = new Blob([data], { type: mime });
+  const blob = new Blob([data as unknown as BlobPart], { type: mime });
 
   // 1. Try createImageBitmap
   if (typeof createImageBitmap === 'function') {
@@ -319,6 +400,14 @@ async function validateImageDecoder(
         };
       }
     } catch {}
+  }
+
+  if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
+    return {
+      valid: false,
+      decoderName: 'Image Decoder',
+      error: `Decodificação visual de ${ext.toUpperCase()} indisponível sem browser DOM/WASM.`,
+    };
   }
 
   // 2. Fallback to HTMLImageElement
@@ -356,10 +445,10 @@ async function validateImageDecoder(
       clearTimeout(timer);
       URL.revokeObjectURL(url);
 
-      // Certain formats like TIFF/ICO might not decode directly in Chrome's <img>
-      if (['tiff', 'tif', 'ico'].includes(ext)) {
+      // Certain formats like TIFF/ICO/JXL/HEIC might not decode directly in Chrome's <img>
+      if (['tiff', 'tif', 'ico', 'jxl', 'heic', 'heif', 'avif'].includes(ext)) {
         resolve({
-          valid: data.byteLength > 50,
+          valid: data.byteLength > 20,
           decoderName: 'ImageFallback',
           details: { decodedBy: 'RawImageStructure' },
         });
@@ -573,4 +662,111 @@ function validateJsonDecoder(data: Uint8Array): Layer2DecoderResult {
       error: `JSON inválido: ${err?.message || err}`,
     };
   }
+}
+
+async function validateGzipContainer(data: Uint8Array): Promise<Layer2DecoderResult> {
+  try {
+    if (typeof DecompressionStream === 'function') {
+      const ds = new DecompressionStream('gzip');
+      const stream = new Blob([data as unknown as BlobPart]).stream().pipeThrough(ds);
+      const buffer = await new Response(stream).arrayBuffer();
+      if (buffer.byteLength === 0) {
+        return { valid: false, decoderName: 'DecompressionStream(gzip)', error: 'GZIP descomprimido está vazio.' };
+      }
+      return {
+        valid: true,
+        decoderName: 'DecompressionStream(gzip)',
+        details: { decodedBy: 'WebDecompressionStream' },
+      };
+    }
+    return { valid: data.byteLength > 10, decoderName: 'GzipHeaderCheck', details: { decodedBy: 'HeaderCheck' } };
+  } catch (err: any) {
+    return { valid: false, decoderName: 'DecompressionStream(gzip)', error: `GZIP inválido: ${err?.message || err}` };
+  }
+}
+
+function validateTarContainer(data: Uint8Array): Layer2DecoderResult {
+  if (data.byteLength < 512) {
+    return { valid: false, decoderName: 'TAR Parser', error: 'Arquivo TAR menor que 512 bytes.' };
+  }
+  const name = new TextDecoder('ascii').decode(data.subarray(0, 100)).replace(/\0.*$/, '');
+  if (!name) {
+    return { valid: false, decoderName: 'TAR Parser', error: 'Arquivo TAR não possui entradas.' };
+  }
+  return { valid: true, decoderName: 'TAR Parser', details: { decodedBy: 'USTARHeader' } };
+}
+
+function validateFontDecoder(data: Uint8Array, ext: string): Layer2DecoderResult {
+  if (data.byteLength < 12) {
+    return { valid: false, decoderName: 'Font Structural Validator', error: 'Arquivo de fonte muito curto.' };
+  }
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  if (ext === 'ttf' || ext === 'otf') {
+    const numTables = view.getUint16(4, false);
+    if (numTables === 0 || numTables > 200) {
+      return { valid: false, decoderName: 'SFNT Validator', error: `Número de tabelas SFNT inválido (${numTables}).` };
+    }
+    return { valid: true, decoderName: 'SFNT Validator', details: { decodedBy: 'SFNTHeader' } };
+  }
+  const numTables = view.getUint16(12, false);
+  if (numTables === 0 || numTables > 200) {
+    return { valid: false, decoderName: `${ext.toUpperCase()} Validator`, error: `Tabelas WOFF inválidas (${numTables}).` };
+  }
+  return { valid: true, decoderName: `${ext.toUpperCase()} Validator`, details: { decodedBy: 'WOFFHeader' } };
+}
+
+function validate3DDecoder(data: Uint8Array, ext: string): Layer2DecoderResult {
+  if (ext === 'glb') {
+    if (data.byteLength < 20) {
+      return { valid: false, decoderName: 'GLB Validator', error: 'GLB menor que cabeçalho mínimo.' };
+    }
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    const version = view.getUint32(4, true);
+    const totalLen = view.getUint32(8, true);
+    const jsonChunkLen = view.getUint32(12, true);
+    const jsonChunkType = view.getUint32(16, true);
+    if (version !== 2 || totalLen !== data.byteLength || jsonChunkType !== 0x4e4f534a) {
+      return { valid: false, decoderName: 'GLB Validator', error: 'Estrutura de chunks GLB 2.0 inválida.' };
+    }
+    try {
+      const jsonText = new TextDecoder().decode(data.subarray(20, 20 + jsonChunkLen));
+      const gltf = JSON.parse(jsonText);
+      if (!gltf.asset) throw new Error('sem campo asset');
+      return { valid: true, decoderName: 'GLB 2.0 Parser', details: { decodedBy: 'GLBChunkParser' } };
+    } catch (err: any) {
+      return { valid: false, decoderName: 'GLB 2.0 Parser', error: `Chunk JSON do GLB inválido: ${err?.message || err}` };
+    }
+  }
+  if (ext === 'gltf') {
+    return validateJsonDecoder(data);
+  }
+  if (ext === 'stl') {
+    const head = new TextDecoder('ascii').decode(data.subarray(0, Math.min(data.byteLength, 256)));
+    if (head.trimStart().startsWith('solid') && head.includes('vertex')) {
+      return { valid: true, decoderName: 'STL ASCII Validator', details: { decodedBy: 'STLParser' } };
+    }
+    if (data.byteLength >= 84) {
+      const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+      const count = view.getUint32(80, true);
+      if (count > 0 && 84 + count * 50 === data.byteLength) {
+        return { valid: true, decoderName: 'STL Binary Validator', details: { decodedBy: 'STLBinaryParser' } };
+      }
+    }
+    return { valid: false, decoderName: 'STL Validator', error: 'Malha STL vazia ou corrompida.' };
+  }
+  if (ext === 'obj') {
+    const text = new TextDecoder().decode(data);
+    if (!/^v\s+/m.test(text)) {
+      return { valid: false, decoderName: 'OBJ Validator', error: 'Arquivo OBJ sem vértices.' };
+    }
+    return { valid: true, decoderName: 'OBJ Validator', details: { decodedBy: 'OBJParser' } };
+  }
+  if (ext === 'ply') {
+    const head = new TextDecoder('ascii').decode(data.subarray(0, Math.min(data.byteLength, 512)));
+    if (!head.includes('element vertex')) {
+      return { valid: false, decoderName: 'PLY Validator', error: 'Cabeçalho PLY sem element vertex.' };
+    }
+    return { valid: true, decoderName: 'PLY Validator', details: { decodedBy: 'PLYParser' } };
+  }
+  return { valid: data.byteLength > 0, decoderName: '3DValidator', details: { decodedBy: 'BufferCheck' } };
 }

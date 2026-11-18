@@ -1,4 +1,4 @@
-﻿import { Archive, FileText, Film, Image as ImageIcon, Music, File, X } from 'lucide-react';
+import { Archive, BookOpen, Box, FileText, Film, Image as ImageIcon, Music, Type, File, X } from 'lucide-react';
 import { describeFile, formatBytes, type Category } from '@/lib/formats';
 import { Card, Typography, Button } from '@/ui/components/core';
 
@@ -8,6 +8,9 @@ const icons: Record<Category, typeof File> = {
   image: ImageIcon,
   document: FileText,
   archive: Archive,
+  ebook: BookOpen,
+  font: Type,
+  model3d: Box,
   other: File,
 };
 

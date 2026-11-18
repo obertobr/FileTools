@@ -58,7 +58,7 @@ export async function runProductionConversion(
   const inputMime = getMimeType(inputExt);
 
   // 1. Construct real native browser File instance (mimics user dropzone upload)
-  const file = new File([fileData], originalName, { type: inputMime });
+  const file = new File([fileData as unknown as BlobPart], originalName, { type: inputMime });
 
   try {
     // 2. Initialize and invoke the actual production WorkerManager singleton
