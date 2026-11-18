@@ -1,0 +1,8 @@
+---
+import Layout from '@/layouts/Layout.astro';
+import { LocalAIHub } from '@/ui/views/LocalAIHub';
+---
+
+<Layout title="FileTools — IAs Locais (WebGPU & WASM)" activePath="/ai" wide={true}>
+  <LocalAIHub client:load />
+</Layout>

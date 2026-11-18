@@ -10,25 +10,77 @@ import { FORMATS } from '../lib/formats';
 import { RemuxModule } from './engines/remux';
 import { MP4BoxModule } from './engines/mp4box';
 import { MediabunnyModule } from './engines/mediabunny';
+import { LameJSModule } from './engines/lamejs';
 import { FFmpegMTModule } from './engines/ffmpeg-mt';
 import { FFmpegModule } from './engines/ffmpeg';
 import { MagickModule } from './engines/magick';
+import { JSquashModule } from './engines/jsquash';
+import { LibHeifModule } from './engines/libheif';
+import { UtifModule } from './engines/utif';
+import { ResvgModule } from './engines/resvg';
+import { SvgoModule } from './engines/svgo';
+import { FflateModule } from './engines/fflate';
+import { ZipJSModule } from './engines/zip';
+import { LibArchiveModule } from './engines/libarchive';
+import { SevenZipModule } from './engines/7z';
 import { PdfModule } from './engines/pdf';
+import { PdfJSModule } from './engines/pdfjs';
 import { MammothModule } from './engines/mammoth';
 import { SheetJSModule } from './engines/sheetjs';
 import { LibreOfficeModule } from './engines/libreoffice';
+import { FoliateModule } from './engines/foliate';
+import { FontEditorModule } from './engines/fonteditor';
+import { WaWoff2Module } from './engines/wawoff2';
+import { AssimpModule } from './engines/assimp';
+import { OcctModule } from './engines/occt';
+import { Lib3mfModule } from './engines/lib3mf';
+import {
+  AIBgRemoveModule,
+  AIWhisperSttModule,
+  AIDictionCoachModule,
+  AITtsKokoroModule,
+  AIUpscalerModule,
+  AIOcrModule,
+  AIAudioDenoiseModule,
+  AIDepthMapModule,
+} from './ai';
 
 export const ModuleRegistry: Record<string, IModule> = {
   'stream-copy': RemuxModule,
   'mp4box': MP4BoxModule,
   'mediabunny': MediabunnyModule,
+  'lamejs': LameJSModule,
   'ffmpeg-core-mt': FFmpegMTModule,
   'ffmpeg-core': FFmpegModule,
   'magick-wasm': MagickModule,
+  'jsquash': JSquashModule,
+  'libheif': LibHeifModule,
+  'utif': UtifModule,
+  'resvg': ResvgModule,
+  'svgo': SvgoModule,
+  'fflate': FflateModule,
+  'zipjs': ZipJSModule,
+  'libarchive': LibArchiveModule,
+  '7z-wasm': SevenZipModule,
   'pdf-lib': PdfModule,
+  'pdfjs': PdfJSModule,
   'mammoth': MammothModule,
   'sheetjs': SheetJSModule,
   'libreoffice': LibreOfficeModule,
+  'foliate': FoliateModule,
+  'fonteditor': FontEditorModule,
+  'wawoff2': WaWoff2Module,
+  'assimp': AssimpModule,
+  'occt': OcctModule,
+  'lib3mf': Lib3mfModule,
+  'ai-bg-remove': AIBgRemoveModule,
+  'ai-whisper-stt': AIWhisperSttModule,
+  'ai-diction-coach': AIDictionCoachModule,
+  'ai-tts-kokoro': AITtsKokoroModule,
+  'ai-upscaler': AIUpscalerModule,
+  'ai-ocr': AIOcrModule,
+  'ai-audio-denoise': AIAudioDenoiseModule,
+  'ai-depth-map': AIDepthMapModule,
 };
 
 export function getAllManifests(): ModuleManifest[] {
@@ -84,6 +136,7 @@ export function resolvePossibleConversions(fileIdentifier: string, mimeType?: st
 
   for (const module of Object.values(ModuleRegistry)) {
     const manifest = module.manifest;
+    if (manifest.category === 'ai') continue;
     
     for (const rule of manifest.supportedConversions) {
       const matchedPattern = rule.from.find(pattern => matchesPattern(pattern, effectiveMime, normalizedExt));
@@ -136,6 +189,7 @@ export async function resolveAvailableEngines(
 
   for (const module of Object.values(ModuleRegistry)) {
     const manifest = module.manifest;
+    if (manifest.category === 'ai') continue;
 
     for (const rule of manifest.supportedConversions) {
       // Check if rule supports target extension

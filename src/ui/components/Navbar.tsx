@@ -4,6 +4,8 @@ import { Button } from '@/ui/components/core';
 const navItems = [
   { href: '/', label: 'Convert' },
   { href: '/converter', label: 'Converters' },
+  { href: '/ai', label: 'Local AI' },
+  { href: '/nodes', label: 'Node Editor' },
 ] as const;
 
 /**

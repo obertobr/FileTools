@@ -17,7 +17,26 @@ import type { ExecutionContext } from '@/shared/types/module';
 import { getModuleById } from '@/modules/registry';
 
 /** Modules that spawn their own workers or use native window APIs */
-const MAIN_THREAD_MODULES = new Set(['ffmpeg-core', 'ffmpeg-core-mt', 'stream-copy', 'mp4box', 'mediabunny', 'libreoffice']);
+const MAIN_THREAD_MODULES = new Set([
+  'ffmpeg-core',
+  'ffmpeg-core-mt',
+  'stream-copy',
+  'mp4box',
+  'mediabunny',
+  'libreoffice',
+  'libarchive',
+  'pdfjs',
+  'foliate',
+  'resvg',
+  'ai-bg-remove',
+  'ai-whisper-stt',
+  'ai-diction-coach',
+  'ai-tts-kokoro',
+  'ai-upscaler',
+  'ai-ocr',
+  'ai-audio-denoise',
+  'ai-depth-map',
+]);
 
 export class WorkerManager {
   private static instance: WorkerManager;
