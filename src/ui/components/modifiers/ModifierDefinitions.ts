@@ -16,7 +16,24 @@ import {
   BookOpen,
   ShieldCheck,
   Printer,
+  Scissors,
+  Sliders,
+  RotateCw,
+  PaintBucket,
+  Archive,
+  KeyRound,
+  Wand2,
+  Type,
+  Box,
+  Table,
+  AudioWaveform,
+  Speaker,
 } from 'lucide-react';
+import {
+  LOSSY_IMAGE_FORMATS,
+  ALPHA_CAPABLE_IMAGES,
+  OPAQUE_IMAGE_TARGETS,
+} from '@/core/knowledge/modifierPresets';
 import type {
   ModifierCategoryId,
   ModifierContext,
@@ -101,10 +118,13 @@ export const MODIFIER_DEFINITIONS: ModifierDefinition[] = [
   {
     id: 'quality',
     title: 'Qualidade e Compressão',
-    description: 'Ajuste a taxa de compressão e fidelidade visual do vídeo.',
+    description: 'Ajuste a taxa de compressão e fidelidade visual do vídeo, imagem ou PDF.',
     icon: Sparkles,
     pinned: false,
-    isApplicable: (ctx) => ctx.targetCategory === 'video' && ctx.targetExt !== 'gif',
+    isApplicable: (ctx) =>
+      (ctx.targetCategory === 'video' && ctx.targetExt !== 'gif') ||
+      (ctx.targetCategory === 'image' && LOSSY_IMAGE_FORMATS.includes(ctx.targetExt)) ||
+      ctx.targetExt === 'pdf',
     deriveOptions: () => ({
       allowedOptions: DEFAULT_QUALITY_OPTIONS,
     }),
@@ -253,7 +273,10 @@ export const MODIFIER_DEFINITIONS: ModifierDefinition[] = [
     description: 'Selecione páginas específicas, intervalo ou a primeira página (capa).',
     icon: BookOpen,
     pinned: (ctx) => ctx.targetCategory === 'document' || ctx.sourceCategory === 'document',
-    isApplicable: (ctx) => ctx.targetCategory === 'document' || ctx.sourceCategory === 'document',
+    isApplicable: (ctx) =>
+      ctx.targetCategory === 'document' ||
+      ctx.sourceCategory === 'document' ||
+      ctx.sourceCategory === 'ebook',
   },
   {
     id: 'pdf_compliance',
@@ -270,5 +293,129 @@ export const MODIFIER_DEFINITIONS: ModifierDefinition[] = [
     icon: Printer,
     pinned: (ctx) => ctx.sourceCategory === 'document' && ctx.targetCategory === 'image',
     isApplicable: (ctx) => ctx.targetCategory === 'image',
+  },
+  {
+    id: 'audio_sample_rate',
+    title: 'Taxa de Amostragem (Hz)',
+    description: 'Defina a frequência de amostragem do áudio (8 kHz até 96 kHz).',
+    icon: AudioWaveform,
+    pinned: false,
+    isApplicable: (ctx) =>
+      ctx.targetCategory === 'audio' || (ctx.targetCategory === 'video' && ctx.targetExt !== 'gif'),
+  },
+  {
+    id: 'audio_channels',
+    title: 'Canais de Áudio',
+    description: 'Alterne entre áudio Mono (1.0) ou Estéreo (2.0).',
+    icon: Speaker,
+    pinned: false,
+    isApplicable: (ctx) =>
+      ctx.targetCategory === 'audio' || (ctx.targetCategory === 'video' && ctx.targetExt !== 'gif'),
+  },
+  {
+    id: 'audio_normalize',
+    title: 'Normalização de Volume',
+    description: 'Nivele o volume com EBU R128 ou normalização de pico sem distorção.',
+    icon: Sliders,
+    pinned: false,
+    isApplicable: (ctx) =>
+      ctx.targetCategory === 'audio' || (ctx.targetCategory === 'video' && ctx.targetExt !== 'gif'),
+  },
+  {
+    id: 'media_trim',
+    title: 'Corte Temporal (Trim)',
+    description: 'Recorte um trecho específico definindo tempo inicial e final em segundos.',
+    icon: Scissors,
+    pinned: false,
+    isApplicable: (ctx) =>
+      (['video', 'audio'].includes(ctx.sourceCategory) && ['video', 'audio'].includes(ctx.targetCategory)) ||
+      (ctx.sourceCategory === 'video' && ctx.targetExt === 'gif'),
+  },
+  {
+    id: 'image_transform',
+    title: 'Rotação & Transformação',
+    description: 'Rotacione, espelhe, converta para escala de cinza ou remova metadados EXIF.',
+    icon: RotateCw,
+    pinned: false,
+    isApplicable: (ctx) => ctx.targetCategory === 'image' && ctx.targetExt !== 'svg',
+  },
+  {
+    id: 'background_color',
+    title: 'Cor de Fundo (Alpha)',
+    description: 'Preencha áreas transparentes ao converter SVG/PNG para formatos opacos como JPG.',
+    icon: PaintBucket,
+    pinned: (ctx) =>
+      ALPHA_CAPABLE_IMAGES.includes(ctx.sourceExt) && OPAQUE_IMAGE_TARGETS.includes(ctx.targetExt),
+    isApplicable: (ctx) =>
+      ctx.targetCategory === 'image' &&
+      (OPAQUE_IMAGE_TARGETS.includes(ctx.targetExt) || ctx.sourceExt === 'svg'),
+    implicitRule: (ctx) => {
+      if (ALPHA_CAPABLE_IMAGES.includes(ctx.sourceExt) && OPAQUE_IMAGE_TARGETS.includes(ctx.targetExt)) {
+        return {
+          isImplicit: true,
+          lockedValue: ctx.currentValues.backgroundColor || '#ffffff',
+          reason: 'Fundo sólido necessário para canal alfa em formato opaco.',
+        };
+      }
+      return { isImplicit: false };
+    },
+  },
+  {
+    id: 'archive_compression',
+    title: 'Nível de Compressão',
+    description: 'Controle entre empacotamento instantâneo (Store 0) ou compressão máxima (9).',
+    icon: Archive,
+    pinned: false,
+    isApplicable: (ctx) => ctx.targetCategory === 'archive',
+  },
+  {
+    id: 'archive_password',
+    title: 'Senha / Criptografia',
+    description: 'Defina senha AES-256 para proteger arquivos ZIP/7Z ou descriptografar a entrada.',
+    icon: KeyRound,
+    pinned: false,
+    isApplicable: (ctx) =>
+      ['zip', '7z'].includes(ctx.targetExt) || ['zip', '7z', 'rar'].includes(ctx.sourceExt),
+  },
+  {
+    id: 'svg_optimize',
+    title: 'Otimização Vetorial SVG',
+    description: 'Configure precisão decimal de paths, multipass e remoção de dimensões fixas.',
+    icon: Wand2,
+    pinned: (ctx) => ctx.sourceExt === 'svg' && ctx.targetExt === 'svg',
+    isApplicable: (ctx) => ctx.sourceExt === 'svg' && ctx.targetExt === 'svg',
+  },
+  {
+    id: 'font_subset',
+    title: 'Subsetting de Glifos (Fonte)',
+    description: 'Mantenha apenas os caracteres informados para reduzir drasticamente o arquivo de fonte.',
+    icon: Type,
+    pinned: false,
+    isApplicable: (ctx) => ctx.sourceCategory === 'font' && ctx.targetCategory === 'font',
+  },
+  {
+    id: 'cad_tessellation',
+    title: 'Precisão de Malha CAD',
+    description: 'Ajuste a densidade de triângulos ao tesselar modelos paramétricos STEP/IGES/BREP.',
+    icon: Box,
+    pinned: (ctx) => ['step', 'stp', 'iges', 'igs', 'brep'].includes(ctx.sourceExt) && ctx.targetCategory === 'model3d',
+    isApplicable: (ctx) => ['step', 'stp', 'iges', 'igs', 'brep'].includes(ctx.sourceExt) && ctx.targetCategory === 'model3d',
+  },
+  {
+    id: 'mesh_options',
+    title: 'Opções de Malha 3D',
+    description: 'Aplique escala de unidades (mm/cm/m) ou exporte STL ASCII/Binário.',
+    icon: Box,
+    pinned: false,
+    isApplicable: (ctx) => ctx.sourceCategory === 'model3d' && ctx.targetCategory === 'model3d',
+  },
+  {
+    id: 'csv_delimiter',
+    title: 'Delimitador CSV/Planilha',
+    description: 'Escolha o separador de colunas (vírgula, ponto e vírgula, tabulação ou pipe).',
+    icon: Table,
+    pinned: false,
+    isApplicable: (ctx) =>
+      ['csv', 'tsv', 'txt'].includes(ctx.sourceExt) || ['csv', 'tsv'].includes(ctx.targetExt),
   },
 ];

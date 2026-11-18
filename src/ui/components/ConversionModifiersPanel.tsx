@@ -39,6 +39,21 @@ import { ColorSpaceCard } from './modifiers/ColorSpaceCard';
 import { PageRangeCard } from './modifiers/PageRangeCard';
 import { PdfComplianceCard } from './modifiers/PdfComplianceCard';
 import { ImageDpiCard } from './modifiers/ImageDpiCard';
+import {
+  AudioSampleRateCard,
+  AudioChannelsCard,
+  AudioNormalizeCard,
+  MediaTrimCard,
+  ImageTransformCard,
+  BackgroundColorCard,
+  ArchiveCompressionCard,
+  ArchivePasswordCard,
+  SvgOptimizeCard,
+  FontSubsetCard,
+  CadTessellationCard,
+  MeshOptionsCard,
+  CsvDelimiterCard,
+} from './modifiers/ExtendedModifierCards';
 import { categoryOfExtension } from '@/lib/formats';
 import { AddModifierPicker } from './modifiers/AddModifierPicker';
 import {
@@ -280,6 +295,39 @@ export function ConversionModifiersPanel({
         activeCategories: nextCategories,
         colorSpace: 'auto',
       });
+    } else if (modId === 'audio_sample_rate') {
+      update({ activeCategories: nextCategories, audioSampleRate: undefined });
+    } else if (modId === 'audio_channels') {
+      update({ activeCategories: nextCategories, audioChannels: undefined });
+    } else if (modId === 'audio_normalize') {
+      update({ activeCategories: nextCategories, audioNormalize: 'off' });
+    } else if (modId === 'media_trim') {
+      update({ activeCategories: nextCategories, trimStartSeconds: undefined, trimEndSeconds: undefined });
+    } else if (modId === 'image_transform') {
+      update({
+        activeCategories: nextCategories,
+        imageRotateDeg: 0,
+        imageFlipH: false,
+        imageFlipV: false,
+        imageGrayscale: false,
+        imageStripMetadata: false,
+      });
+    } else if (modId === 'background_color') {
+      update({ activeCategories: nextCategories, backgroundColor: '#ffffff' });
+    } else if (modId === 'archive_compression') {
+      update({ activeCategories: nextCategories, archiveCompressionLevel: 6 });
+    } else if (modId === 'archive_password') {
+      update({ activeCategories: nextCategories, archivePassword: undefined });
+    } else if (modId === 'svg_optimize') {
+      update({ activeCategories: nextCategories, svgMultipass: true, svgFloatPrecision: 3, svgRemoveDimensions: false });
+    } else if (modId === 'font_subset') {
+      update({ activeCategories: nextCategories, fontSubsetText: undefined });
+    } else if (modId === 'cad_tessellation') {
+      update({ activeCategories: nextCategories, cadQuality: 'standard' });
+    } else if (modId === 'mesh_options') {
+      update({ activeCategories: nextCategories, meshScale: 1, meshAsciiStl: false });
+    } else if (modId === 'csv_delimiter') {
+      update({ activeCategories: nextCategories, csvDelimiter: ',' });
     } else {
       update({ activeCategories: nextCategories });
     }
@@ -592,6 +640,46 @@ export function ConversionModifiersPanel({
                       onChange={update}
                       warningMessage={derived?.warningMessage}
                     />
+                  )}
+
+                  {modId === 'audio_sample_rate' && (
+                    <AudioSampleRateCard options={currentModifiers} onChange={update} />
+                  )}
+                  {modId === 'audio_channels' && (
+                    <AudioChannelsCard options={currentModifiers} onChange={update} />
+                  )}
+                  {modId === 'audio_normalize' && (
+                    <AudioNormalizeCard options={currentModifiers} onChange={update} />
+                  )}
+                  {modId === 'media_trim' && (
+                    <MediaTrimCard options={currentModifiers} onChange={update} />
+                  )}
+                  {modId === 'image_transform' && (
+                    <ImageTransformCard options={currentModifiers} onChange={update} />
+                  )}
+                  {modId === 'background_color' && (
+                    <BackgroundColorCard options={currentModifiers} onChange={update} />
+                  )}
+                  {modId === 'archive_compression' && (
+                    <ArchiveCompressionCard options={currentModifiers} onChange={update} />
+                  )}
+                  {modId === 'archive_password' && (
+                    <ArchivePasswordCard options={currentModifiers} onChange={update} />
+                  )}
+                  {modId === 'svg_optimize' && (
+                    <SvgOptimizeCard options={currentModifiers} onChange={update} />
+                  )}
+                  {modId === 'font_subset' && (
+                    <FontSubsetCard options={currentModifiers} onChange={update} />
+                  )}
+                  {modId === 'cad_tessellation' && (
+                    <CadTessellationCard options={currentModifiers} onChange={update} />
+                  )}
+                  {modId === 'mesh_options' && (
+                    <MeshOptionsCard options={currentModifiers} onChange={update} />
+                  )}
+                  {modId === 'csv_delimiter' && (
+                    <CsvDelimiterCard options={currentModifiers} onChange={update} />
                   )}
 
                   {/* MODIFICADOR: NÚCLEOS / THREADS DE PROCESSAMENTO */}

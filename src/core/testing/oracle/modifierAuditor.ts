@@ -176,6 +176,64 @@ export function auditModifiers(
     }
   }
 
+  // 7. Audit Audio Sample Rate
+  if (active.includes('audio_sample_rate') && modifiers.audioSampleRate) {
+    audited.push('audio_sample_rate');
+    if (decodedDetails?.sampleRate && decodedDetails.sampleRate !== modifiers.audioSampleRate) {
+      failures.push({
+        id: 'audio_sample_rate',
+        expected: `${modifiers.audioSampleRate} Hz`,
+        actual: `${decodedDetails.sampleRate} Hz`,
+        reason: `Taxa de amostragem divergente (${decodedDetails.sampleRate} Hz vs ${modifiers.audioSampleRate} Hz).`,
+      });
+    }
+  }
+
+  // 8. Audit Audio Channels
+  if (active.includes('audio_channels') && modifiers.audioChannels) {
+    audited.push('audio_channels');
+    if (decodedDetails?.channels && decodedDetails.channels !== modifiers.audioChannels) {
+      failures.push({
+        id: 'audio_channels',
+        expected: `${modifiers.audioChannels} canal(is)`,
+        actual: `${decodedDetails.channels} canal(is)`,
+        reason: `Número de canais divergente (${decodedDetails.channels} vs ${modifiers.audioChannels}).`,
+      });
+    }
+  }
+
+  // 9. Audit Image Transform
+  if (active.includes('image_transform')) {
+    audited.push('image_transform');
+  }
+
+  // 10. Audit SVG Optimize
+  if (active.includes('svg_optimize') && cleanExt === 'svg') {
+    audited.push('svg_optimize');
+    const text = new TextDecoder().decode(data.subarray(0, Math.min(data.byteLength, 2048)));
+    if (!/<svg[\s>]/i.test(text)) {
+      failures.push({
+        id: 'svg_optimize',
+        expected: 'Documento SVG otimizado contendo tag <svg>',
+        actual: 'Tag <svg> ausente',
+        reason: 'Saída SVG otimizada não contém marcação vetorial <svg> válida.',
+      });
+    }
+  }
+
+  // 11. Audit Archive Compression
+  if (active.includes('archive_compression') && ['zip', 'gz', 'tar', '7z', 'tgz'].includes(cleanExt)) {
+    audited.push('archive_compression');
+    if (data.byteLength < 10) {
+      failures.push({
+        id: 'archive_compression',
+        expected: 'Arquivo compactado não vazio',
+        actual: `${data.byteLength} bytes`,
+        reason: 'Arquivo compactado resultou em buffer vazio ou truncado.',
+      });
+    }
+  }
+
   return {
     valid: failures.length === 0,
     auditedModifiers: audited,

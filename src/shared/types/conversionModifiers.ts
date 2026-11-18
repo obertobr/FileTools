@@ -26,7 +26,20 @@ export type ModifierCategoryId =
   | 'color_space'
   | 'page_range'
   | 'pdf_compliance'
-  | 'image_dpi';
+  | 'image_dpi'
+  | 'audio_sample_rate'
+  | 'audio_channels'
+  | 'audio_normalize'
+  | 'media_trim'
+  | 'image_transform'
+  | 'background_color'
+  | 'archive_compression'
+  | 'archive_password'
+  | 'svg_optimize'
+  | 'font_subset'
+  | 'cad_tessellation'
+  | 'mesh_options'
+  | 'csv_delimiter';
 
 export type QualityPreset = 'original' | 'balanced' | 'compressed' | 'custom';
 
@@ -163,6 +176,30 @@ export interface ConversionModifiers {
   isCustomImageDpi?: boolean;
   pdfQuality?: number;
 
+  // Extended Cross-Category Modifiers
+  quality?: number;
+  audioSampleRate?: number;
+  audioChannels?: number;
+  audioNormalize?: 'off' | 'ebu-r128' | 'peak-0db';
+  trimStartSeconds?: number;
+  trimEndSeconds?: number;
+  imageRotateDeg?: 0 | 90 | 180 | 270;
+  imageFlipH?: boolean;
+  imageFlipV?: boolean;
+  imageGrayscale?: boolean;
+  imageStripMetadata?: boolean;
+  backgroundColor?: string;
+  archiveCompressionLevel?: number;
+  archivePassword?: string;
+  svgMultipass?: boolean;
+  svgFloatPrecision?: number;
+  svgRemoveDimensions?: boolean;
+  fontSubsetText?: string;
+  cadQuality?: 'draft' | 'standard' | 'fine';
+  meshScale?: number;
+  meshAsciiStl?: boolean;
+  csvDelimiter?: string;
+
   // Probed media streams (real file metadata - NEVER mocked)
   probedMedia?: MediaProbeResult;
 }
@@ -192,6 +229,21 @@ export const DEFAULT_CONVERSION_MODIFIERS: ConversionModifiers = {
   pdfCompliance: 'default',
   imageDpi: 150,
   pdfQuality: 90,
+  audioNormalize: 'off',
+  imageRotateDeg: 0,
+  imageFlipH: false,
+  imageFlipV: false,
+  imageGrayscale: false,
+  imageStripMetadata: false,
+  backgroundColor: '#ffffff',
+  archiveCompressionLevel: 6,
+  svgMultipass: true,
+  svgFloatPrecision: 3,
+  svgRemoveDimensions: false,
+  cadQuality: 'standard',
+  meshScale: 1,
+  meshAsciiStl: false,
+  csvDelimiter: ',',
 };
 
 export interface ModifierContext {

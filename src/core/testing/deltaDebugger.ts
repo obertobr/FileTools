@@ -85,6 +85,10 @@ export function getApplicableModifierPool(
     'threads',
     'audio_tracks',
     'audio_merge',
+    'audio_sample_rate',
+    'audio_channels',
+    'audio_normalize',
+    'media_trim',
     'subtitles',
     'video_duration',
     'pixel_format',
@@ -94,6 +98,15 @@ export function getApplicableModifierPool(
     'page_range',
     'pdf_compliance',
     'image_dpi',
+    'image_transform',
+    'background_color',
+    'archive_compression',
+    'archive_password',
+    'svg_optimize',
+    'font_subset',
+    'cad_tessellation',
+    'mesh_options',
+    'csv_delimiter',
   ];
 
   const pool: ModifierPatch[] = [];
@@ -261,6 +274,123 @@ export function getApplicableModifierPool(
       id: 'image_dpi',
       description: 'Densidade de renderização 300 DPI',
       patch: { imageDpi: 300 },
+    });
+  }
+
+  // 18. Audio Sample Rate
+  if (isSupported('audio_sample_rate')) {
+    pool.push({
+      id: 'audio_sample_rate',
+      description: 'Taxa de amostragem 44100 Hz',
+      patch: { audioSampleRate: 44100 },
+    });
+  }
+
+  // 19. Audio Channels
+  if (isSupported('audio_channels')) {
+    pool.push({
+      id: 'audio_channels',
+      description: 'Canais de áudio Mono (1)',
+      patch: { audioChannels: 1 },
+    });
+  }
+
+  // 20. Audio Normalize
+  if (isSupported('audio_normalize')) {
+    pool.push({
+      id: 'audio_normalize',
+      description: 'Normalização de pico EBU R128',
+      patch: { audioNormalize: 'ebu-r128' },
+    });
+  }
+
+  // 21. Media Trim
+  if (isSupported('media_trim')) {
+    pool.push({
+      id: 'media_trim',
+      description: 'Recorte temporal 0s -> 1s',
+      patch: { trimStartSeconds: 0, trimEndSeconds: 1 },
+    });
+  }
+
+  // 22. Image Transform
+  if (isSupported('image_transform')) {
+    pool.push({
+      id: 'image_transform',
+      description: 'Rotação de imagem 90 graus',
+      patch: { imageRotateDeg: 90 },
+    });
+  }
+
+  // 23. Background Color
+  if (isSupported('background_color')) {
+    pool.push({
+      id: 'background_color',
+      description: 'Cor de fundo #FFFFFF',
+      patch: { backgroundColor: '#FFFFFF' },
+    });
+  }
+
+  // 24. Archive Compression
+  if (isSupported('archive_compression')) {
+    pool.push({
+      id: 'archive_compression',
+      description: 'Nível de compressão máxima (9)',
+      patch: { archiveCompressionLevel: 9 },
+    });
+  }
+
+  // 25. Archive Password
+  if (isSupported('archive_password')) {
+    pool.push({
+      id: 'archive_password',
+      description: 'Criptografia de arquivo com senha',
+      patch: { archivePassword: 'test' },
+    });
+  }
+
+  // 26. SVG Optimize
+  if (isSupported('svg_optimize')) {
+    pool.push({
+      id: 'svg_optimize',
+      description: 'Otimização vetorial SVG multipass',
+      patch: { svgMultipass: true, svgFloatPrecision: 2 },
+    });
+  }
+
+  // 27. Font Subset
+  if (isSupported('font_subset')) {
+    pool.push({
+      id: 'font_subset',
+      description: 'Subsetting de fonte ASCII básica',
+      patch: { fontSubsetText: 'ABCabc123' },
+    });
+  }
+
+  // 28. CAD Tessellation
+  if (isSupported('cad_tessellation')) {
+    pool.push({
+      id: 'cad_tessellation',
+      description: 'Tesselação CAD padrão',
+      patch: { cadQuality: 'standard' },
+    });
+  }
+
+  // 29. Mesh Options
+  if (isSupported('mesh_options')) {
+    pool.push({
+      id: 'mesh_options',
+      description: 'Escala de malha 3D',
+      patch: { meshScale: 1 },
+    });
+  }
+
+  // 30. CSV Delimiter
+  if (isSupported('csv_delimiter')) {
+    pool.push({
+      id: 'csv_delimiter',
+      description: 'Delimitador CSV ponto e vírgula (;)',
+      patch: { csvDelimiter: ';' },
     });
   }
 

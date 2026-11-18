@@ -41,6 +41,19 @@ export const MODIFIER_LABELS: Record<ModifierCategoryId, string> = {
   page_range: 'Intervalo de Páginas',
   pdf_compliance: 'Padrão PDF / Conformidade PDF/A',
   image_dpi: 'Resolução de Renderização (DPI)',
+  audio_sample_rate: 'Taxa de Amostragem (Hz)',
+  audio_channels: 'Canais de Áudio',
+  audio_normalize: 'Normalização de Volume',
+  media_trim: 'Corte Temporal (Trim)',
+  image_transform: 'Rotação & Transformação',
+  background_color: 'Cor de Fundo (Alpha)',
+  archive_compression: 'Nível de Compressão',
+  archive_password: 'Senha / Criptografia',
+  svg_optimize: 'Otimização Vetorial SVG',
+  font_subset: 'Subsetting de Glifos (Fonte)',
+  cad_tessellation: 'Precisão de Malha CAD',
+  mesh_options: 'Opções de Malha 3D',
+  csv_delimiter: 'Delimitador & Planilha',
 };
 
 /**
