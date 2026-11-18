@@ -1,0 +1,8 @@
+---
+import Layout from '@/layouts/Layout.astro';
+import { NodeEditorWorkspace } from '@/ui/views/NodeEditorWorkspace';
+---
+
+<Layout title="FileTools — Node Editor (Pipelines & IA)" activePath="/nodes" wide={true}>
+  <NodeEditorWorkspace client:only="react" />
+</Layout>

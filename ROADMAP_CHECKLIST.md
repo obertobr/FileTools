@@ -106,17 +106,17 @@ Este checklist acompanha em tempo real a execução das Fases 1 a 6 do plano de 
 ---
 
 ## Fase 6: Nova Aba de Edição Baseada em Nodes (`/nodes` — Pipeline Visual DAG)
-- [ ] **6.1 Motor de Execução DAG**
-  - [ ] Criar `src/core/graph/types.ts`, `GraphValidator.ts` e `GraphEngine.ts` (`.ftgraph`, OPFS zero-copy, batch, cache incremental, abort)
-- [ ] **6.2 Nodes Modulares de Composição & Lote (`src/modules/nodes/`)**
-  - [ ] `node-video-to-frames.ts` (Vídeo → `batch<image>` + `audio`)
-  - [ ] `node-frames-to-video.ts` (`batch<image>` + `audio` → Vídeo)
-  - [ ] `node-video-periodic-overlay.ts` (Overlay periódico modular, ex: a cada 5s por 1s)
-  - [ ] `node-burn-subtitles.ts` (Vídeo + legenda → Vídeo legendado)
-  - [ ] `node-batch-processor.ts` (Execução de módulos/IAs em lote sobre `batch<T>`)
-- [ ] **6.3 Interface Visual `/nodes` & Templates**
-  - [ ] Criar `src/pages/nodes/index.astro` e `src/ui/views/NodeEditorWorkspace.tsx` com `@xyflow/react`
-  - [ ] Adicionar templates prontos (Overlay Periódico, Vídeo→Frames→IA Fundo→Vídeo, Vídeo→Whisper→Legenda, Batch Archive)
-- [ ] **6.4 Validação Final Global**
-  - [ ] Criar `src/core/graph/GraphEngine.test.ts` cobrindo ciclos, portas, `.ftgraph` e pipelines reais
-  - [ ] Executar `npx tsc --noEmit`, `npm run test`, `npm run build` e testes dinâmicos
+- [x] **6.1 Motor de Execução DAG**
+  - [x] Criar `src/core/graph/types.ts`, `GraphValidator.ts` e `GraphEngine.ts` (`.ftgraph`, OPFS zero-copy, batch, cache incremental, abort)
+- [x] **6.2 Nodes Modulares de Composição & Lote (`src/modules/nodes/`)**
+  - [x] `node-video-to-frames.ts` (Vídeo → `batch<image>` + `audio`)
+  - [x] `node-frames-to-video.ts` (`batch<image>` + `audio` → Vídeo)
+  - [x] `node-video-periodic-overlay.ts` (Overlay periódico modular, ex: a cada 5s por 1s)
+  - [x] `node-burn-subtitles.ts` (Vídeo + legenda → Vídeo legendado)
+  - [x] `node-batch-processor.ts` (Execução de módulos/IAs em lote sobre `batch<T>`)
+- [x] **6.3 Interface Visual `/nodes` & Templates**
+  - [x] Criar `src/pages/nodes/index.astro` e `src/ui/views/NodeEditorWorkspace.tsx` com `@xyflow/react`
+  - [x] Adicionar templates prontos (Overlay Periódico, Vídeo→Frames→IA Fundo→Vídeo, Vídeo→Whisper→Legenda, Upscaler→WebP)
+- [x] **6.4 Validação Final Global**
+  - [x] Criar `src/core/graph/GraphEngine.test.ts` cobrindo ciclos, portas, `.ftgraph` e pipelines reais
+  - [x] Executar `npx tsc --noEmit`, `npm run test` (10 arquivos / 99 testes), e `npm run build` (2890 páginas)
